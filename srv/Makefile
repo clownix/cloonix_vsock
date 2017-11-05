@@ -1,6 +1,6 @@
 LIBMDL=../libmdl
 CC = gcc
-CFLAGS=-I${LIBMDL}
+CFLAGS=-I${LIBMDL} -ggdb
 LIBS=-L${LIBMDL} -lmdl -lutil
 
 

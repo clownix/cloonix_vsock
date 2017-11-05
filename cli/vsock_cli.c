@@ -224,12 +224,15 @@ static void action_input_rx(int sock_fd)
 {
   int len;
   t_msg msg;
-  len = read(0, msg.buf, sizeof(msg.buf));
-  if (len <= 0)
-    KOUT(" ");
-  msg.type = msg_type_data;
-  msg.len = len;
-  mdl_queue_write(sock_fd, &msg);
+  if (!mdl_queue_write_saturated(sock_fd))
+    {
+    len = read(0, msg.buf, sizeof(msg.buf));
+    if (len <= 0)
+      KOUT(" ");
+    msg.type = msg_type_data;
+    msg.len = len;
+    mdl_queue_write(sock_fd, &msg);
+    }
 }
 
 /*--------------------------------------------------------------------------*/
@@ -242,11 +245,11 @@ static void select_loop(int sock_fd, int win_chg_read_fd, int max)
   int n;
   FD_ZERO(&readfds);
   FD_ZERO(&writefds);
+  FD_SET(win_chg_read_fd, &readfds);
+  FD_SET(sock_fd, &readfds);
   if (!mdl_queue_write_saturated(sock_fd))
     {
     FD_SET(0, &readfds);
-    FD_SET(win_chg_read_fd, &readfds);
-    FD_SET(sock_fd, &readfds);
     if (mdl_queue_write_not_empty(sock_fd))
       FD_SET(sock_fd, &writefds);
     }

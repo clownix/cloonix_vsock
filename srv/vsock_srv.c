@@ -173,17 +173,21 @@ static int open_listen_vsock(int vsock_port)
 static void cli_pty_master_action(t_cli *cli)
 {
   t_msg msg;
-  int len = read(cli->pty_master_fd, msg.buf, sizeof(msg.buf));
-  if (len <= 0)
+  int len;
+  if (!mdl_queue_write_saturated(cli->sock_fd))
     {
-    close(cli->pty_master_fd);
-    cli->pty_master_fd = -1;
-    }
-  else
-    {
-    msg.type = msg_type_data2cli;
-    msg.len = len;
-    mdl_queue_write(cli->sock_fd, &msg);
+    len = read(cli->pty_master_fd, msg.buf, sizeof(msg.buf));
+    if (len <= 0)
+      {
+      close(cli->pty_master_fd);
+      cli->pty_master_fd = -1;
+      }
+    else
+      {
+      msg.type = msg_type_data2cli;
+      msg.len = len;
+      mdl_queue_write(cli->sock_fd, &msg);
+      }
     }
 }
 /*--------------------------------------------------------------------------*/
@@ -356,11 +360,11 @@ static void prepare_fd_set(int listen_sock_fd, int sig_read_fd,
   FD_SET(sig_read_fd, readfds);
   while(cur)
     {
+    FD_SET(cur->sock_fd, readfds);
     if (!mdl_queue_write_saturated(cur->sock_fd))
       {
       if (cur->pty_master_fd != -1)
         FD_SET(cur->pty_master_fd, readfds);
-      FD_SET(cur->sock_fd, readfds);
       if (mdl_queue_write_not_empty(cur->sock_fd))
         FD_SET(cur->sock_fd, writefds);
       }

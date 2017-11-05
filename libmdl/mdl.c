@@ -97,6 +97,8 @@ void mdl_write(int s)
         }
       }
     }
+  else if (mdl)
+    KERR("%d %d", mdl->txoffst_end, mdl->txoffst_start);
 }
 /*--------------------------------------------------------------------------*/
 
@@ -149,20 +151,23 @@ static void do_cb(t_mdl *mdl, void *ptr, t_rx_msg_cb rx_cb, t_rx_err_cb err_cb)
   t_msg *msg = (t_msg *) mdl->bufrx;
   char *tmp;
   int done, rxoffst = mdl->rxoffst;
-  if ((rxoffst >= g_msg_header_len) && 
-      (rxoffst >= msg->len + g_msg_header_len))
+  if (rxoffst >= g_msg_header_len)
     {
-    do
+    if ((msg->len < 0) || (msg->len > MAX_MSG_LEN))
+      KOUT("header len: %d", msg->len); 
+    if (rxoffst >= msg->len + g_msg_header_len)
       {
-      if (msg->cafe != 0xCAFEDECA)
-        KOUT("header id is %X", msg->cafe);
-      rx_cb(ptr, msg);
-      done = msg->len + g_msg_header_len;
-      msg = (t_msg *)((char *)msg + done);
-      rxoffst -= done;
-      } while((rxoffst >= g_msg_header_len) &&
-              (rxoffst >= msg->len + g_msg_header_len));
-
+      do
+        {
+        if (msg->cafe != 0xCAFEDECA)
+          KOUT("header id is %X", msg->cafe);
+        rx_cb(ptr, msg);
+        done = msg->len + g_msg_header_len;
+        msg = (t_msg *)((char *)msg + done);
+        rxoffst -= done;
+        } while((rxoffst >= g_msg_header_len) &&
+                (rxoffst >= msg->len + g_msg_header_len));
+      }
     if (rxoffst)
       {
       tmp = (char *) malloc(rxoffst);
@@ -181,27 +186,36 @@ static void do_cb(t_mdl *mdl, void *ptr, t_rx_msg_cb rx_cb, t_rx_err_cb err_cb)
 void mdl_read(void *ptr, int s, t_rx_msg_cb rx_cb, t_rx_err_cb err_cb)
 {
   char err[MAX_PATH_LEN];
-  int len, wlen;
+  int len, wlen, max_to_read;
   t_mdl *mdl = g_mdl[s];
   if (!mdl) 
     err_cb(ptr, "Context mdl not found");
   else
     {
-    len = read(s, mdl->bufrx + mdl->rxoffst, MAX_QUEUE_MDL_RX - mdl->rxoffst);
-    if (len == 0)
-      err_cb(ptr, "read len is 0");
-    else if (len < 0)
+    if (MAX_QUEUE_MDL_RX - mdl->rxoffst > sizeof(t_msg))
       {
-      if ((errno != EAGAIN) && (errno != EINTR))
+      max_to_read = MAX_QUEUE_MDL_RX - mdl->rxoffst - sizeof(t_msg);
+      len = read(s, mdl->bufrx + mdl->rxoffst, max_to_read);
+      if (len == 0)
+        err_cb(ptr, "read len is 0");
+      else if (len < 0)
         {
-        snprintf(err, MAX_PATH_LEN-1, "read error: %s", strerror(errno));
-        err[MAX_PATH_LEN-1] = 0;
-        err_cb(ptr, err);
+        if ((errno != EAGAIN) && (errno != EINTR))
+          {
+          snprintf(err, MAX_PATH_LEN-1, "read error: %s", strerror(errno));
+          err[MAX_PATH_LEN-1] = 0;
+          err_cb(ptr, err);
+          }
+        }
+      else
+        {
+        mdl->rxoffst += len;
+        do_cb(mdl, ptr, rx_cb, err_cb);
         }
       }
     else
       {
-      mdl->rxoffst += len;
+      KERR("%d", mdl->rxoffst);
       do_cb(mdl, ptr, rx_cb, err_cb);
       }
     }
