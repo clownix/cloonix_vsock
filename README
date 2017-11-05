@@ -1,0 +1,59 @@
+
+Software to help using VirtioVsock
+
+Provides a distant bash from a virtual guest to its host going through
+the virtio-vsock host/guest communications device.
+
+
+To use, first create the server and client binaries:
+
+./doitall
+
+
+On the host:
+
+sudo rmmod vmw_vsock_vmci_transport
+sudo rmmod vmw_vsock_virtio_transport_common
+sudo rmmod vsock
+sudo modprobe vhost_vsock
+ls -l /dev/vhost-vsock
+sudo chmod 666 /dev/vhost-vsock
+ls -l /dev/vhost-vsock
+
+sudo ./vsock_srv -v 777
+
+
+Launch your virtual env, the qemu must have the following in its call:
+-device vhost-vsock-pci,id=vhost-vsock-pci0,guest-cid=4
+for me, I use last cloonix, as follows:
+
+cloonix_net nemo
+cloonix_gui nemo
+cloonix_cli nemo add kvm cloon 2000 2 2 stretch.qcow2 --vhost-vsock
+cloonix_scp nemo vsock_cli cloon:
+cloonix_ssh nemo cloon
+
+In the cloon virtual machine, as root you can do:
+
+./vsock_cli -v 2 777
+
+And you get a pseudo-console as root on the host.
+
+In case of problem with this software, do:
+sudo cat /var/log/user.log
+
+For problems use github or mail clownix at clownix.net.
+
+To test the software without vsock, you can do:
+
+./vsock_srv -u /tmp/whatever
+./vsock_cli -u /tmp/whatever
+
+
+
+
+
+
+
+sudo cat /var/log/user.log 
+

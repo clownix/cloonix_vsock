@@ -1,0 +1,12 @@
+#!/bin/bash
+HERE=`pwd`
+./allclean
+cd ${HERE}/libmdl
+make
+cd ${HERE}/srv
+make
+mv vsock_srv ${HERE} 
+cd ${HERE}/cli
+make
+mv vsock_cli ${HERE} 
+
