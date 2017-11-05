@@ -26,8 +26,6 @@
 
 #define KERR(format, a...)                                     \
  do {                                                          \
-    printf("WARN %s line:%d " format "\n", \
-           basename(__FILE__), __LINE__, ## a);            \
     syslog(LOG_ERR | LOG_USER, "WARN %s line:%d " format "\n", \
            basename(__FILE__), __LINE__, ## a);            \
     } while (0)

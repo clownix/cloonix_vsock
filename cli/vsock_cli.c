@@ -212,7 +212,6 @@ static void rx_msg_cb(void *ptr, t_msg *msg)
     }
   else if (msg->type == msg_type_end2cli)
     {
-    KERR("%d", msg->buf[0] & 0xFF);
     exit(msg->buf[0]);
     }
   else
