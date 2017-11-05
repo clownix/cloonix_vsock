@@ -273,7 +273,6 @@ static void send_msg_type_end(int s, char status)
   msg.type = msg_type_end2cli;
   msg.len = 1;
   msg.buf[0] = status;
-KERR("%d", status & 0xFF);
   mdl_queue_write(s, &msg);
 }
 /*--------------------------------------------------------------------------*/
