@@ -37,6 +37,31 @@ typedef struct t_mdl
 
 static t_mdl *g_mdl[MAX_FD_NUM];
 
+
+/*****************************************************************************/
+int ip_string_to_int (int *inet_addr, char *ip_string)
+{
+  int result = -1;
+  unsigned int part[4];
+  if (strlen(ip_string) != 0)
+    {
+    if ((sscanf(ip_string,"%u.%u.%u.%u",
+                          &part[0], &part[1], &part[2], &part[3]) == 4) &&
+        (part[0]<=0xFF) && (part[1]<=0xFF) &&
+        (part[2]<=0xFF) && (part[3]<=0xFF))
+      {
+      result = 0;
+      *inet_addr = 0;
+      *inet_addr += part[0]<<24;
+      *inet_addr += part[1]<<16;
+      *inet_addr += part[2]<<8;
+      *inet_addr += part[3];
+      }
+    }
+  return result;
+}
+/*---------------------------------------------------------------------------*/
+
 /****************************************************************************/
 int mdl_parse_val(const char *str_val)
 {

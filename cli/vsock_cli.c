@@ -29,6 +29,8 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <linux/vm_sockets.h>
+#include <netinet/in.h>
+
 
 #include "mdl.h"
 
@@ -93,17 +95,6 @@ static void send_msg_type_win_size(int s)
 /*--------------------------------------------------------------------------*/
 
 /****************************************************************************/
-static void send_msg_type_kill(int s)
-{
-  t_msg msg;
-  msg.type = msg_type_kill;
-  msg.len = 0;
-  mdl_queue_write(s, &msg);
-} 
-/*--------------------------------------------------------------------------*/
-
-
-/****************************************************************************/
 static void config_sigs(void)
 {
   if (signal(SIGPIPE, cli_exit))
@@ -139,11 +130,35 @@ static void config_term(void)
 }
 /*--------------------------------------------------------------------------*/
 
+/*****************************************************************************/
+static int connect_isock(char *ipascii, int ip, int port)
+{
+  int s, result = -1;
+  struct sockaddr_in sockin;
+  memset(&sockin, 0, sizeof(sockin));
+  s = socket (AF_INET,SOCK_STREAM,0);
+  if (s >= 0)
+    {
+    sockin.sin_family = AF_INET;
+    sockin.sin_port = htons(port);
+    sockin.sin_addr.s_addr = htonl(ip);
+    if (connect(s, (struct sockaddr*)&sockin, sizeof(sockin)) == 0)
+      result = s;
+    else
+      KOUT("Connect error ip: %s  port: %d\n", ipascii, port);
+    }
+  else
+    KOUT("socket AF_INET SOCK_STREAM create error");
+  return result;
+}
+/*---------------------------------------------------------------------------*/
+
 /****************************************************************************/
-static int connect_unix_socket(char *name)
+static int connect_usock(char *name)
 {
   int s, result = -1;
   struct sockaddr_un sockun;
+  memset(&sockun, 0, sizeof(sockun));
   s = socket(PF_UNIX, SOCK_STREAM, 0);
   if (s >= 0)
     {
@@ -276,7 +291,7 @@ static void select_loop(int sock_fd, int win_chg_read_fd, int max)
 /*--------------------------------------------------------------------------*/
 
 /****************************************************************************/
-static void loop_cli(int sock_fd, char *cmd, int kill)
+static void loop_cli(int sock_fd, char *cmd)
 {
   int pipe_fd[2];
   int max;
@@ -293,8 +308,6 @@ static void loop_cli(int sock_fd, char *cmd, int kill)
     config_sigs();
     send_msg_type_open_bash(sock_fd, cmd);
     send_msg_type_win_size(sock_fd);
-    if (kill)
-      send_msg_type_kill(sock_fd);
     max = sock_fd;
     if (pipe_fd[0] > max)
       max = pipe_fd[0];
@@ -309,6 +322,8 @@ static void loop_cli(int sock_fd, char *cmd, int kill)
 /****************************************************************************/
 static void usage(char *name)
 {
+  printf("\n%s -i <ip> <port>", name);
+  printf("\n%s -i <ip> <port> -c \"<cmd>\"", name);
   printf("\n%s -u <unix_sock>", name);
   printf("\n%s -u <unix_sock> -c \"<cmd>\"", name);
   printf("\n%s -v <vsock_cid> <vsock_port>", name);
@@ -318,79 +333,82 @@ static void usage(char *name)
 /*--------------------------------------------------------------------------*/
 
 /****************************************************************************/
-static void main_usock(int argc, char **argv)
+static void main_usock(char *unix_sock_path, char *cmd)
 {
-  char *cmd, unix_sock_path[MAX_PATH_LEN];
   int sock_fd;
-  memset(unix_sock_path, 0, MAX_PATH_LEN);
-  strncpy(unix_sock_path, argv[2], MAX_PATH_LEN-1);
-  sock_fd = connect_unix_socket(unix_sock_path);
+  sock_fd = connect_usock(unix_sock_path);
   if (sock_fd < 0)
     KOUT(" %s: %s\n", unix_sock_path, strerror(errno));
-  if (argc == 3)
-    {
-    loop_cli(sock_fd, NULL, 0);
-    }
-  else if ((argc == 5) && !strcmp(argv[3], "-c"))
-    {
-    cmd = argv[4];
-    if (cmd && (strlen(cmd) >= MAX_MSG_LEN))
-      KOUT("%d %s", strlen(cmd), cmd);
-    loop_cli(sock_fd, cmd, 0);
-    }
-  else if ((argc == 4) && !strcmp(argv[3], "-k"))
-    {
-    loop_cli(sock_fd, NULL, 1);
-    }
-  else
-    {
-    usage(argv[0]);
-    }
+  if (cmd && (strlen(cmd) >= MAX_MSG_LEN))
+    KOUT("%d %s", strlen(cmd), cmd);
+  loop_cli(sock_fd, cmd);
 }
 /*--------------------------------------------------------------------------*/
 
+/****************************************************************************/
+static void main_vsock(char *cid, char *port, char *cmd)
+{
+  int sock_fd, vsock_cid, vsock_port;
+  vsock_cid = mdl_parse_val(cid);
+  vsock_port = mdl_parse_val(port);
+  sock_fd = connect_vsock(vsock_cid, vsock_port);
+  if (cmd && (strlen(cmd) >= MAX_MSG_LEN))
+    KOUT("%d %s", strlen(cmd), cmd);
+  loop_cli(sock_fd, cmd);
+}
+/*--------------------------------------------------------------------------*/
 
 /****************************************************************************/
-static void main_vsock(int argc, char **argv)
+static void main_isock(char *ip, char *port, char *cmd)
 {
-  char *cmd;
-  int sock_fd, vsock_cid, vsock_port;
-  if (argc < 4)
-      usage(argv[0]);
-  vsock_cid = mdl_parse_val(argv[2]);
-  vsock_port = mdl_parse_val(argv[3]);
-  sock_fd = connect_vsock(vsock_cid, vsock_port);
-  if (argc == 4)
-    {
-    loop_cli(sock_fd, NULL, 0);
-    }
-  else if ((argc == 6) && !strcmp(argv[4], "-c"))
-    {
-    cmd = argv[5];
-    if (cmd && (strlen(cmd) >= MAX_MSG_LEN))
-      KOUT("%d %s", strlen(cmd), cmd);
-    loop_cli(sock_fd, cmd, 0);
-    }
-  else if ((argc == 5) && !strcmp(argv[4], "-k"))
-    {
-    loop_cli(sock_fd, NULL, 1);
-    }
-  else
-    {
-    usage(argv[0]);
-    }
+  int sock_fd, ip_num, port_num;
+  if (ip_string_to_int(&ip_num, ip))
+    KOUT("Bad ip: %s", ip);
+  port_num = mdl_parse_val(port);
+  sock_fd = connect_isock(ip, ip_num, port_num);
+  if (cmd && (strlen(cmd) >= MAX_MSG_LEN))
+    KOUT("%d %s", strlen(cmd), cmd);
+  loop_cli(sock_fd, cmd);
 }
 /*--------------------------------------------------------------------------*/
 
 /****************************************************************************/
 int main(int argc, char **argv)
 {
+  char unix_sock_path[MAX_PATH_LEN];
+  char *cmd;
   if (argc < 3)
     usage(argv[0]);
   if (!strcmp(argv[1], "-u"))
-    main_usock(argc, argv);
+    {
+    if (argc == 3)
+      cmd = NULL;
+    else if ((argc == 5) && !strcmp(argv[3], "-c"))
+      cmd = argv[4];
+    else
+      usage(argv[0]);
+    main_usock(argv[2], cmd);
+    }
   else if (!strcmp(argv[1], "-v"))
-    main_vsock(argc, argv);
+    {
+    if (argc == 4)
+      cmd = NULL;
+    else if ((argc == 6) && !strcmp(argv[4], "-c"))
+      cmd = argv[5];
+    else
+      usage(argv[0]);
+    main_vsock(argv[2], argv[3], cmd);
+    }
+  else if (!strcmp(argv[1], "-i"))
+    {
+    if (argc == 4)
+      cmd = NULL;
+    else if ((argc == 6) && !strcmp(argv[4], "-c"))
+      cmd = argv[5];
+    else
+      usage(argv[0]);
+    main_isock(argv[2], argv[3], cmd);
+    }
   else
     usage(argv[0]);
   return 0;

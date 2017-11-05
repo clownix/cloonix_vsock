@@ -29,6 +29,7 @@
 #include <sys/un.h>
 #include <termios.h>
 #include <linux/vm_sockets.h>
+#include <netinet/in.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include "mdl.h"
@@ -123,7 +124,7 @@ static void nonblocking(int fd)
 /*--------------------------------------------------------------------------*/
 
 /****************************************************************************/
-static int open_listen_socket(char *name)
+static int open_listen_usock(char *name)
 {
   int s, result = -1;
   struct sockaddr_un sockun;
@@ -135,7 +136,7 @@ static int open_listen_socket(char *name)
     strcpy(sockun.sun_path, name);
     if (bind(s, (struct sockaddr*)&sockun, sizeof(sockun)) >= 0)
       {
-      if (listen(s, 16) == 0)
+      if (listen(s, 40) == 0)
         {
         nonblocking(s);
         result = s;
@@ -162,7 +163,28 @@ static int open_listen_vsock(int vsock_port)
   vsock.svm_port = vsock_port;
   if (bind(s, (struct sockaddr*)&vsock, sizeof(vsock)) < 0)
     KOUT("%s", strerror(errno));
-  if (listen(s, 16) < 0)
+  if (listen(s, 40) < 0)
+    KOUT("%s", strerror(errno));
+  nonblocking(s);
+  return s;
+}
+/*--------------------------------------------------------------------------*/
+
+/****************************************************************************/
+static int open_listen_isock(int isock_port)
+{
+  int s;
+  struct sockaddr_in isock;
+  memset(&isock, 0, sizeof(isock));
+  s = socket(AF_INET, SOCK_STREAM, 0);
+  if (s < 0)
+    KOUT("%s", strerror(errno));
+  isock.sin_family = AF_INET;
+  isock.sin_addr.s_addr = htonl(INADDR_ANY);
+  isock.sin_port = htons(isock_port);
+  if (bind(s, (struct sockaddr*)&isock, sizeof(isock)) < 0)
+    KOUT("%s", strerror(errno));
+  if (listen(s, 40) < 0)
     KOUT("%s", strerror(errno));
   nonblocking(s);
   return s;
@@ -455,6 +477,7 @@ static int parse_port(const char *port_str)
 /****************************************************************************/
 static void usage(char *name)
 {
+  printf("\n%s -i <inet_port>", name);
   printf("\n%s -u <unix_sock>", name);
   printf("\n%s -v <vsock_port>\n", name);
   exit(1);
@@ -465,25 +488,35 @@ static void usage(char *name)
 int main(int argc, char **argv)
 {
   char unix_sock_path[MAX_PATH_LEN];
-  int listen_sock_fd, vsock_port;
+  int listen_sock_fd, port;
   g_nb_cli = 0;
-  if ((argc != 3) || (strcmp(argv[1], "-u") && strcmp(argv[1], "-v")))
+  if (argc != 3)
     usage(argv[0]);
   if (!strcmp(argv[1], "-u"))
     {
     memset(unix_sock_path, 0, MAX_PATH_LEN);
     strncpy(unix_sock_path, argv[2], MAX_PATH_LEN-1);
-    listen_sock_fd = open_listen_socket(unix_sock_path);
+    listen_sock_fd = open_listen_usock(unix_sock_path);
     if (listen_sock_fd < 0)
       KOUT(" %s: %s\n", unix_sock_path, strerror(errno));
     }
-  else
+  else if (!strcmp(argv[1], "-v"))
     {
-    vsock_port = mdl_parse_val(argv[2]);
-    listen_sock_fd = open_listen_vsock(vsock_port);
+    port = mdl_parse_val(argv[2]);
+    listen_sock_fd = open_listen_vsock(port);
     if (listen_sock_fd < 0)
-      KOUT(" %d: %s\n", vsock_port, strerror(errno));
+      KOUT(" %d: %s\n", port, strerror(errno));
     }
+  else if (!strcmp(argv[1], "-i"))
+    {
+    port = mdl_parse_val(argv[2]);
+    listen_sock_fd = open_listen_isock(port);
+    if (listen_sock_fd < 0)
+      KOUT(" %d: %s\n", port, strerror(errno));
+    }
+  else
+    usage(argv[0]);
+
   if (listen_sock_fd >= 0)
     vsock_srv(listen_sock_fd);
   return 0;
