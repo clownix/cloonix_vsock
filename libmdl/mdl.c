@@ -153,6 +153,8 @@ static void do_cb(t_mdl *mdl, void *ptr, t_rx_msg_cb rx_cb, t_rx_err_cb err_cb)
   int done, rxoffst = mdl->rxoffst;
   if (rxoffst >= g_msg_header_len)
     {
+    if (msg->cafe != 0xCAFEDECA)
+      KOUT("header id is %X", msg->cafe);
     if ((msg->len < 0) || (msg->len > MAX_MSG_LEN))
       KOUT("header len: %d", msg->len); 
     if (rxoffst >= msg->len + g_msg_header_len)
@@ -170,10 +172,25 @@ static void do_cb(t_mdl *mdl, void *ptr, t_rx_msg_cb rx_cb, t_rx_err_cb err_cb)
       }
     if (rxoffst)
       {
+      if (rxoffst >= g_msg_header_len)
+        {
+        if (msg->cafe != 0xCAFEDECA)
+          KOUT("header id is %X", msg->cafe);
+        if ((msg->len < 0) || (msg->len > MAX_MSG_LEN))
+          KOUT("header len: %d", msg->len); 
+        }
       tmp = (char *) malloc(rxoffst);
       memcpy(tmp, msg, rxoffst);
       memcpy(mdl->bufrx, tmp, rxoffst);
       free(tmp);
+      if (rxoffst >= g_msg_header_len)
+        {
+        msg = (t_msg *) mdl->bufrx;
+        if (msg->cafe != 0xCAFEDECA)
+          KOUT("header id is %X", msg->cafe);
+        if ((msg->len < 0) || (msg->len > MAX_MSG_LEN))
+          KOUT("header len: %d", msg->len);
+        }
       mdl->rxoffst = rxoffst;
       }
     else
