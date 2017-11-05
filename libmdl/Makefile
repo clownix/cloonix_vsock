@@ -1,7 +1,7 @@
 CC = gcc
 AR = ar
 RANLIB = ranlib
-CFLAGS=-I. -ggdb
+CFLAGS=-I.
 
 all: obj/ libmdl.a
 

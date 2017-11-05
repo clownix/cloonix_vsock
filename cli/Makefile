@@ -1,6 +1,6 @@
 LIBMDL=../libmdl
 CC = gcc
-CFLAGS=-I${LIBMDL} -ggdb
+CFLAGS=-I${LIBMDL}
 LIBS=-L${LIBMDL} -lmdl -lutil
 
 all: obj/ vsock_cli
