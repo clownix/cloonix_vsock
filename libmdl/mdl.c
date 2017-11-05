@@ -192,9 +192,9 @@ void mdl_read(void *ptr, int s, t_rx_msg_cb rx_cb, t_rx_err_cb err_cb)
     err_cb(ptr, "Context mdl not found");
   else
     {
-    if (MAX_QUEUE_MDL_RX - mdl->rxoffst > sizeof(t_msg))
+    if (MAX_QUEUE_MDL_RX - mdl->rxoffst > 0)
       {
-      max_to_read = MAX_QUEUE_MDL_RX - mdl->rxoffst - sizeof(t_msg);
+      max_to_read = MAX_QUEUE_MDL_RX - mdl->rxoffst;
       len = read(s, mdl->bufrx + mdl->rxoffst, max_to_read);
       if (len == 0)
         err_cb(ptr, "read len is 0");
