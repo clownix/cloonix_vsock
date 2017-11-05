@@ -86,7 +86,8 @@ void mdl_write(int s)
   int len;
   if ((mdl) && (mdl->txoffst_end - mdl->txoffst_start))
     {
-    len = write(s, mdl->buftx, mdl->txoffst_end - mdl->txoffst_start);
+    len = write(s, mdl->buftx + mdl->txoffst_start,
+                   mdl->txoffst_end - mdl->txoffst_start);
     if (len > 0)
       {
       mdl->txoffst_start += len;
