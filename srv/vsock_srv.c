@@ -77,8 +77,23 @@ static void cli_free(t_cli *cli)
   close(cli->sock_fd);
   mdl_close(cli->sock_fd);
   if (cli->pty_master_fd != -1)
+    {
     close(cli->pty_master_fd);
+    mdl_close(cli->pty_master_fd);
+    }
   free(cli);
+}
+/*--------------------------------------------------------------------------*/
+
+/****************************************************************************/
+static void nonblocking(int fd)
+{
+  int flags;
+  flags = fcntl(fd, F_GETFL);
+  if (flags < 0)
+    KOUT(" ");
+  if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0)
+    KOUT(" ");
 }
 /*--------------------------------------------------------------------------*/
 
@@ -108,18 +123,9 @@ static void bin_bash_pty(t_cli *cli, char *cmd)
     KOUT("%s", strerror(errno));
   else if (cli->pty_master_fd < 0)
     KOUT("%s", strerror(errno));
-}
-/*--------------------------------------------------------------------------*/
-
-/****************************************************************************/
-static void nonblocking(int fd)
-{
-  int flags;
-  flags = fcntl(fd, F_GETFL);
-  if (flags < 0)
-    KOUT(" ");
-  if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0)
-    KOUT(" ");
+  if (mdl_open(cli->pty_master_fd))
+    KOUT("%d", cli->pty_master_fd);
+  nonblocking(cli->pty_master_fd);
 }
 /*--------------------------------------------------------------------------*/
 
@@ -208,7 +214,7 @@ static void cli_pty_master_action(t_cli *cli)
       {
       msg.type = msg_type_data2cli;
       msg.len = len;
-      mdl_queue_write(cli->sock_fd, &msg);
+      mdl_queue_write_msg(cli->sock_fd, &msg);
       }
     }
 }
@@ -249,7 +255,6 @@ static void rx_err_cb (void *ptr, char *err)
 static void rx_msg_cb(void *ptr, t_msg *msg)
 {
   t_cli *cli = (t_cli *) ptr;
-  int len;
   switch(msg->type)
     {
 
@@ -257,11 +262,7 @@ static void rx_msg_cb(void *ptr, t_msg *msg)
       if (cli->pty_master_fd == -1)
         KOUT(" ");
       else
-        {
-        len = write(cli->pty_master_fd, msg->buf, msg->len);
-        if (len != msg->len)
-          KOUT("%d %d %s", len, msg->len, strerror(errno));
-        }
+        mdl_queue_write_raw(cli->pty_master_fd, msg->buf, msg->len);
     break;
 
     case msg_type_open_bash :
@@ -299,7 +300,7 @@ static void send_msg_type_end(int s, char status)
   msg.type = msg_type_end2cli;
   msg.len = 1;
   msg.buf[0] = status;
-  mdl_queue_write(s, &msg);
+  mdl_queue_write_msg(s, &msg);
 }
 /*--------------------------------------------------------------------------*/
 
@@ -309,8 +310,8 @@ static void sig_evt_action(int sig_read_fd)
 {
   t_cli *cur = g_cli_head;
   int len, status, pid;
-  char buf[16], exstat;
-  len = read(sig_read_fd, buf, sizeof(buf));
+  char buf[1], exstat;
+  len = read(sig_read_fd, buf, 1);
   if ((len != 1) || (buf[0] != 's'))
     KOUT("%d %s", len, buf);
   else
@@ -383,6 +384,11 @@ static void prepare_fd_set(int listen_sock_fd, int sig_read_fd,
   while(cur)
     {
     FD_SET(cur->sock_fd, readfds);
+    if (cur->pty_master_fd != -1)
+      {
+      if (mdl_queue_write_not_empty(cur->pty_master_fd))
+        FD_SET(cur->pty_master_fd, writefds);
+      }
     if (!mdl_queue_write_saturated(cur->sock_fd))
       {
       if (cur->pty_master_fd != -1)
@@ -426,6 +432,8 @@ static void server_loop(int listen_sock_fd, int sig_read_fd)
         {
         if (FD_ISSET(cur->pty_master_fd, &readfds))
           cli_pty_master_action(cur);
+        if (FD_ISSET(cur->pty_master_fd, &writefds))
+          mdl_write(cur->pty_master_fd);
         }
       if (FD_ISSET(cur->sock_fd, &readfds))
         mdl_read((void *)cur, cur->sock_fd, rx_msg_cb, rx_err_cb);

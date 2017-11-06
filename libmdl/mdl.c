@@ -151,23 +151,30 @@ int mdl_queue_write_not_empty(int s)
 /*--------------------------------------------------------------------------*/
 
 /****************************************************************************/
-int mdl_queue_write(int s, t_msg *msg)
+int mdl_queue_write_raw(int s, char *buf, int len)
 {
   int result = -1;
-  int len = msg->len + g_msg_header_len;
   t_mdl *mdl = g_mdl[s];
-  if (!mdl) 
+  if (!mdl)
     KERR(" ");
   else if (len >= MAX_QUEUE_MDL_TX - mdl->txoffst_end)
     KERR("%d %d %d", len, MAX_QUEUE_MDL_TX, mdl->txoffst_end);
   else
     {
-    msg->cafe = 0xCAFEDECA;
-    memcpy(mdl->buftx + mdl->txoffst_end, msg, len);
+    memcpy(mdl->buftx + mdl->txoffst_end, buf, len);
     mdl->txoffst_end += len;
     result = 0;
     }
   return result;
+}
+/*--------------------------------------------------------------------------*/
+
+/****************************************************************************/
+int mdl_queue_write_msg(int s, t_msg *msg)
+{
+  int len = msg->len + g_msg_header_len;
+  msg->cafe = 0xCAFEDECA;
+  return mdl_queue_write_raw(s, (char *)msg, len);
 }
 /*--------------------------------------------------------------------------*/
 

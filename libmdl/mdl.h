@@ -62,7 +62,8 @@ static const int g_msg_header_len = (3*sizeof(long));
 int mdl_parse_val(const char *str_val);
 int ip_string_to_int (int *inet_addr, char *ip_string);
 
-int mdl_queue_write(int s, t_msg *msg);
+int mdl_queue_write_msg(int s, t_msg *msg);
+int mdl_queue_write_raw(int s, char *buf, int len);
 int mdl_queue_write_not_empty(int s);
 int mdl_queue_write_saturated(int s);
 void mdl_write(int s);

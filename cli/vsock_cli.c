@@ -79,7 +79,7 @@ static void send_msg_type_open_bash(int s, char *cmd)
     msg.type = msg_type_open_bash;
     msg.len = 0;
     }
-  mdl_queue_write(s, &msg);
+  mdl_queue_write_msg(s, &msg);
 }
 /*--------------------------------------------------------------------------*/
 
@@ -90,7 +90,7 @@ static void send_msg_type_win_size(int s)
   msg.type = msg_type_win_size;
   msg.len = sizeof(struct winsize);
   ioctl(0, TIOCGWINSZ, msg.buf);
-  mdl_queue_write(s, &msg);
+  mdl_queue_write_msg(s, &msg);
 }
 /*--------------------------------------------------------------------------*/
 
@@ -200,8 +200,6 @@ static void action_win_chg(int sock_fd, int win_chg_read_fd)
   int len;
   char buf[16];
   len = read(win_chg_read_fd, buf, sizeof(buf));
-  if ((len != 1) || (buf[0] != 'w'))
-    KOUT("%d %s", len, buf);
   send_msg_type_win_size(sock_fd);
 }
 /*--------------------------------------------------------------------------*/
@@ -217,18 +215,11 @@ static void rx_err_cb (void *ptr, char *err)
 /****************************************************************************/
 static void rx_msg_cb(void *ptr, t_msg *msg)
 {
-  int len;
   (void) ptr;
   if (msg->type == msg_type_data2cli) 
-    {
-    len = write(1, msg->buf, msg->len);
-    if (len != msg->len)
-      KOUT("%d %d %s", len, msg->len, strerror(errno)); 
-    }
+    mdl_queue_write_raw(1, msg->buf, msg->len);
   else if (msg->type == msg_type_end2cli)
-    {
     exit(msg->buf[0]);
-    }
   else
     KOUT(" ");
 }
@@ -246,7 +237,7 @@ static void action_input_rx(int sock_fd)
       KOUT(" ");
     msg.type = msg_type_data;
     msg.len = len;
-    mdl_queue_write(sock_fd, &msg);
+    mdl_queue_write_msg(sock_fd, &msg);
     }
 }
 
@@ -262,6 +253,8 @@ static void select_loop(int sock_fd, int win_chg_read_fd, int max)
   FD_ZERO(&writefds);
   FD_SET(win_chg_read_fd, &readfds);
   FD_SET(sock_fd, &readfds);
+  if (mdl_queue_write_not_empty(1))
+    FD_SET(1, &writefds);
   if (!mdl_queue_write_saturated(sock_fd))
     {
     FD_SET(0, &readfds);
@@ -278,6 +271,8 @@ static void select_loop(int sock_fd, int win_chg_read_fd, int max)
     }
   else
     {
+    if (FD_ISSET(1, &writefds))
+      mdl_write(1);
     if (FD_ISSET(sock_fd, &writefds))
       mdl_write(sock_fd);
     if (FD_ISSET(win_chg_read_fd, &readfds))
@@ -303,6 +298,7 @@ static void loop_cli(int sock_fd, char *cmd)
     printf("Error too big fd\n");
   else
     {
+    mdl_open(1); 
     g_win_chg_write_fd = pipe_fd[1];
     config_term();
     config_sigs();

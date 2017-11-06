@@ -39,16 +39,20 @@ In the cloon virtual machine, as root you can do:
 
 And you get a pseudo-console as root on the host.
 
-In case of problem with this software, do:
+In case of unexpected events with this software, do:
 sudo cat /var/log/user.log
 
-For problems use github or mail clownix at clownix.net.
+For bug reports use github or mail clownix at clownix.net.
 
 To test the software without vsock, you can do:
 
 ./vsock_srv -u /tmp/whatever
 ./vsock_cli -u /tmp/whatever
 
+or
+
+./vsock_srv -i 127.0.0.1 7777
+./vsock_cli -i 127.0.0.1 7777
 
 
 
