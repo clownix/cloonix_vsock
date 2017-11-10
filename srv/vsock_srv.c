@@ -207,8 +207,7 @@ static void cli_pty_master_action(t_cli *cli)
     len = read(cli->pty_master_fd, msg.buf, sizeof(msg.buf));
     if (len <= 0)
       {
-      close(cli->pty_master_fd);
-      cli->pty_master_fd = -1;
+      cli_free(cli);
       }
     else
       {
@@ -449,17 +448,17 @@ static void vsock_srv(int listen_sock_fd)
   int pipe_fd[2];
   daemon(0,0);
   if (signal(SIGPIPE, SIG_IGN))
-    KOUT("%d", errno);
+    KERR("%d", errno);
   if (signal(SIGHUP, SIG_IGN))
-    KOUT("%d", errno);
+    KERR("%d", errno);
   if (signal(SIGTTIN, SIG_IGN))
-    KOUT("%d", errno);
+    KERR("%d", errno);
   if (signal(SIGTTOU, SIG_IGN))
-    KOUT("%d", errno);
+    KERR("%d", errno);
   if (signal(SIGCHLD, child_exit))
-    KOUT("%d", errno);
+    KERR("%d", errno);
   if (pipe(pipe_fd) < 0)
-    KOUT(" ");
+    KERR(" ");
   g_sig_write_fd = pipe_fd[1];
   while (1)
     {
@@ -485,9 +484,11 @@ static int parse_port(const char *port_str)
 /****************************************************************************/
 static void usage(char *name)
 {
+  printf("\n%s <vsock_port>\n", name);
+  printf("\n\t or for tests:\n");
   printf("\n%s -i <inet_port>", name);
-  printf("\n%s -u <unix_sock>", name);
-  printf("\n%s -v <vsock_port>\n", name);
+  printf("\n%s -u <unix_sock_path>", name);
+  printf("\n\n");
   exit(1);
 }
 /*--------------------------------------------------------------------------*/
@@ -498,7 +499,14 @@ int main(int argc, char **argv)
   char unix_sock_path[MAX_PATH_LEN];
   int listen_sock_fd, port;
   g_nb_cli = 0;
-  if (argc != 3)
+  if (argc == 2)
+    {
+    port = mdl_parse_val(argv[1]);
+    listen_sock_fd = open_listen_vsock(port);
+    if (listen_sock_fd < 0)
+      KOUT(" %d: %s\n", port, strerror(errno));
+    }
+  else if(argc != 3)
     usage(argv[0]);
   if (!strcmp(argv[1], "-u"))
     {
@@ -507,13 +515,6 @@ int main(int argc, char **argv)
     listen_sock_fd = open_listen_usock(unix_sock_path);
     if (listen_sock_fd < 0)
       KOUT(" %s: %s\n", unix_sock_path, strerror(errno));
-    }
-  else if (!strcmp(argv[1], "-v"))
-    {
-    port = mdl_parse_val(argv[2]);
-    listen_sock_fd = open_listen_vsock(port);
-    if (listen_sock_fd < 0)
-      KOUT(" %d: %s\n", port, strerror(errno));
     }
   else if (!strcmp(argv[1], "-i"))
     {

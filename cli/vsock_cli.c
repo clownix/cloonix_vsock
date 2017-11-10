@@ -98,17 +98,17 @@ static void send_msg_type_win_size(int s)
 static void config_sigs(void)
 {
   if (signal(SIGPIPE, cli_exit))
-    KOUT("%d", errno);
+    KERR("%d", errno);
   if (signal(SIGHUP, cli_exit))
-    KOUT("%d", errno);
+    KERR("%d", errno);
   if (signal(SIGTERM, cli_exit))
-    KOUT("%d", errno);
+    KERR("%d", errno);
   if (signal(SIGINT, cli_exit))
-    KOUT("%d", errno);
+    KERR("%d", errno);
   if (signal(SIGQUIT, cli_exit))
-    KOUT("%d", errno);
+    KERR("%d", errno);
   if (signal(SIGWINCH, win_size_chg))
-    KOUT("%d", errno);
+    KERR("%d", errno);
 }
 /*--------------------------------------------------------------------------*/
 
@@ -318,12 +318,14 @@ static void loop_cli(int sock_fd, char *cmd)
 /****************************************************************************/
 static void usage(char *name)
 {
+  printf("\n%s <vsock_cid> <vsock_port>", name);
+  printf("\n%s <vsock_cid> <vsock_port> -c \"<cmd>\"\n", name);
+  printf("\n\t or for tests:\n");
   printf("\n%s -i <ip> <port>", name);
   printf("\n%s -i <ip> <port> -c \"<cmd>\"", name);
   printf("\n%s -u <unix_sock>", name);
   printf("\n%s -u <unix_sock> -c \"<cmd>\"", name);
-  printf("\n%s -v <vsock_cid> <vsock_port>", name);
-  printf("\n%s -v <vsock_cid> <vsock_port> -c \"<cmd>\"\n", name);
+  printf("\n\n");
   exit(1);
 }
 /*--------------------------------------------------------------------------*/
@@ -385,16 +387,6 @@ int main(int argc, char **argv)
       usage(argv[0]);
     main_usock(argv[2], cmd);
     }
-  else if (!strcmp(argv[1], "-v"))
-    {
-    if (argc == 4)
-      cmd = NULL;
-    else if ((argc == 6) && !strcmp(argv[4], "-c"))
-      cmd = argv[5];
-    else
-      usage(argv[0]);
-    main_vsock(argv[2], argv[3], cmd);
-    }
   else if (!strcmp(argv[1], "-i"))
     {
     if (argc == 4)
@@ -406,7 +398,15 @@ int main(int argc, char **argv)
     main_isock(argv[2], argv[3], cmd);
     }
   else
-    usage(argv[0]);
+    {
+    if (argc == 3)
+      cmd = NULL;
+    else if ((argc == 5) && !strcmp(argv[3], "-c"))
+      cmd = argv[4];
+    else
+      usage(argv[0]);
+    main_vsock(argv[1], argv[2], cmd);
+    }
   return 0;
 }
 /*--------------------------------------------------------------------------*/

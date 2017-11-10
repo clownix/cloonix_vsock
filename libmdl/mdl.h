@@ -32,9 +32,9 @@
 
 #define KOUT(format, a...)                                     \
  do {                                                          \
-    printf("KILL %s line:%d " format "\n", \
-           basename(__FILE__), __LINE__, ## a);            \
     syslog(LOG_ERR | LOG_USER, "KILL %s line:%d " format "\n", \
+           basename(__FILE__), __LINE__, ## a);            \
+    printf("KILL %s line:%d " format "\r\n", \
            basename(__FILE__), __LINE__, ## a);            \
     exit(-1);                                                  \
     } while (0)
