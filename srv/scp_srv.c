@@ -28,12 +28,15 @@
 static int scp_rx_open_snd(char *src, char *complete_dst, char *resp)
 {
   struct stat sb;
+  char dupdst[MAX_PATH_LEN];
   char *dir_path;
   int result = -1;
+  memset(dupdst, 0, MAX_PATH_LEN);
   memset(resp, 0, MAX_PATH_LEN);
+  snprintf(dupdst, MAX_PATH_LEN-1, "%s", complete_dst); 
   if (stat(complete_dst, &sb) == -1)
     {
-    dir_path = dirname(complete_dst);
+    dir_path = dirname(dupdst);
     if (stat(dir_path, &sb) != -1)
       {
       snprintf(resp, MAX_PATH_LEN-1, "OK %s %s", src, complete_dst); 
@@ -41,11 +44,11 @@ static int scp_rx_open_snd(char *src, char *complete_dst, char *resp)
       }
     else 
       snprintf(resp, MAX_PATH_LEN-1, 
-               "KO %s directory does not exist", dir_path);
+               "KO distant %s directory does not exist", dir_path);
     }
   else
     snprintf(resp, MAX_PATH_LEN-1, 
-             "KO %s exists already\n", complete_dst);
+             "KO distant %s exists already\n", complete_dst);
   return result;
 }
 /*--------------------------------------------------------------------------*/
@@ -58,7 +61,7 @@ static int scp_rx_open_rcv(char *src, char *complete_dst, char *resp)
   int result = -1;
   memset(resp, 0, MAX_PATH_LEN);
   if (stat(src, &sb) == -1)
-    snprintf(resp, MAX_PATH_LEN-1, "KO %s does not exist\n", src);
+    snprintf(resp, MAX_PATH_LEN-1, "KO distant %s does not exist\n", src);
   else
     {
     snprintf(resp, MAX_PATH_LEN-1, "OK %s %s", src, complete_dst); 

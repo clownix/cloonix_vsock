@@ -249,12 +249,33 @@ static void rx_err_cb (void *ptr, char *err)
 static int rx_msg_cb(void *ptr, t_msg *msg)
 {
   (void) ptr;
-  if (msg->type == msg_type_data_cli) 
+  switch(msg->type)
+    {
+    case msg_type_data_cli:
     mdl_queue_write_raw(1, msg->buf, msg->len);
-  else if (msg->type == msg_type_end_cli)
-    exit(msg->buf[0]);
-  else
-    KOUT(" ");
+      break;
+    case msg_type_ready_to_snd:
+      if (msg->buf[0] == 'K')
+        {
+        printf("%s", msg->buf);
+        exit(1);
+        }
+      KERR("%s", msg->buf);
+      break;
+    case msg_type_ready_to_rcv:
+      if (msg->buf[0] == 'K')
+        {
+        printf("%s", msg->buf);
+        exit(1);
+        }
+      KERR("%s", msg->buf);
+      break;
+    case msg_type_end_cli:
+      exit(msg->buf[0]);
+      break;
+    default:
+      KOUT(" ");
+    }
   return 0;
 }
 /*--------------------------------------------------------------------------*/
