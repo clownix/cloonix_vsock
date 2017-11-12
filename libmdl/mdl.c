@@ -196,7 +196,8 @@ static void do_cb(t_mdl *mdl, void *ptr, t_rx_msg_cb rx_cb, t_rx_err_cb err_cb)
         {
         if (msg->cafe != 0xCAFEDECA)
           KOUT("header id is %X", msg->cafe);
-        rx_cb(ptr, msg);
+        if (rx_cb(ptr, msg))
+          return;
         done = msg->len + g_msg_header_len;
         msg = (t_msg *)((char *)msg + done);
         rxoffst -= done;

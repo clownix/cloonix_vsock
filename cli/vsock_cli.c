@@ -30,14 +30,15 @@
 #include <sys/un.h>
 #include <linux/vm_sockets.h>
 #include <netinet/in.h>
-
-
 #include "mdl.h"
+#include "scp_cli.h"
 
 static struct termios g_orig_term;
 static struct termios g_cur_term;
 static int g_win_chg_write_fd;
 static char g_sock_path[MAX_PATH_LEN];
+static int g_is_snd;
+static int g_is_rcv;
 
 /****************************************************************************/
 static void restore_term(void)
@@ -65,14 +66,13 @@ static void win_size_chg(int sig)
 /*--------------------------------------------------------------------------*/
 
 /****************************************************************************/
-static void send_msg_type_open_bash(int s, char *cmd)
+static void send_msg_type_open_pty(int s, char *cmd)
 {
   t_msg msg;
   if (cmd)
     {
-    msg.type = msg_type_open_bashcmd;
-    msg.len = strlen(cmd) + 1;
-    memcpy(msg.buf, cmd, msg.len);
+    msg.type = msg_type_open_cmd;
+    msg.len = sprintf(msg.buf, "%s", cmd) + 1;
     }
   else
     {
@@ -80,6 +80,39 @@ static void send_msg_type_open_bash(int s, char *cmd)
     msg.len = 0;
     }
   mdl_queue_write_msg(s, &msg);
+}
+/*--------------------------------------------------------------------------*/
+
+/****************************************************************************/
+static int send_msg_type_open_snd(int s, char *src, char *remote_dir)
+{
+  t_msg msg;
+  char complete_dst[MAX_PATH_LEN];
+  int result = scp_open_snd(src, remote_dir, complete_dst);
+  if (result == 0)
+    { 
+    msg.type = msg_type_open_cli_snd;
+    msg.len = sprintf(msg.buf, "%s %s", src, complete_dst) + 1;
+    mdl_queue_write_msg(s, &msg);
+    }
+  return result;
+}
+/*--------------------------------------------------------------------------*/
+
+/****************************************************************************/
+static int send_msg_type_open_rcv(int s, char *src, char *local_dir)
+{
+  t_msg msg;
+  char complete_dst[MAX_PATH_LEN];
+  int result = scp_open_rcv(src, local_dir, complete_dst);
+  if (result != -1)
+    {
+    msg.type = msg_type_open_cli_rcv;
+    msg.len = sprintf(msg.buf, "%s %s", src, complete_dst) + 1;
+    mdl_queue_write_msg(s, &msg);
+    result = 0;
+    }
+  return result;
 }
 /*--------------------------------------------------------------------------*/
 
@@ -213,15 +246,16 @@ static void rx_err_cb (void *ptr, char *err)
 /*--------------------------------------------------------------------------*/
 
 /****************************************************************************/
-static void rx_msg_cb(void *ptr, t_msg *msg)
+static int rx_msg_cb(void *ptr, t_msg *msg)
 {
   (void) ptr;
-  if (msg->type == msg_type_data2cli) 
+  if (msg->type == msg_type_data_cli) 
     mdl_queue_write_raw(1, msg->buf, msg->len);
-  else if (msg->type == msg_type_end2cli)
+  else if (msg->type == msg_type_end_cli)
     exit(msg->buf[0]);
   else
     KOUT(" ");
+  return 0;
 }
 /*--------------------------------------------------------------------------*/
 
@@ -235,7 +269,7 @@ static void action_input_rx(int sock_fd)
     len = read(0, msg.buf, sizeof(msg.buf));
     if (len <= 0)
       KOUT(" ");
-    msg.type = msg_type_data;
+    msg.type = msg_type_data_pty;
     msg.len = len;
     mdl_queue_write_msg(sock_fd, &msg);
     }
@@ -244,7 +278,7 @@ static void action_input_rx(int sock_fd)
 /*--------------------------------------------------------------------------*/
 
 /****************************************************************************/
-static void select_loop(int sock_fd, int win_chg_read_fd, int max)
+static void select_loop_pty(int sock_fd, int win_chg_read_fd, int max)
 {
   fd_set readfds;
   fd_set writefds;
@@ -286,30 +320,76 @@ static void select_loop(int sock_fd, int win_chg_read_fd, int max)
 /*--------------------------------------------------------------------------*/
 
 /****************************************************************************/
-static void loop_cli(int sock_fd, char *cmd)
+static void select_loop_snd_rcv(int sock_fd)
 {
-  int pipe_fd[2];
-  int max;
-  if (pipe(pipe_fd) < 0)
-    printf("Error pipe\n");
-  else if (tcgetattr(0, &g_orig_term) < 0)
-    printf("Error No pty\n");
-  else if (mdl_open(sock_fd)) 
-    printf("Error too big fd\n");
+  fd_set readfds;
+  fd_set writefds;
+  int n;
+  FD_ZERO(&readfds);
+  FD_ZERO(&writefds);
+  FD_SET(sock_fd, &readfds);
+  if (mdl_queue_write_not_empty(sock_fd))
+    FD_SET(sock_fd, &writefds);
+  n = select(sock_fd + 1, &readfds, &writefds, NULL, NULL);
+  if (n <= 0)
+    {
+    if ((errno != EINTR) && (errno != EAGAIN))
+      KOUT(" ");
+    }
   else
     {
-    mdl_open(1); 
-    g_win_chg_write_fd = pipe_fd[1];
-    config_term();
-    config_sigs();
-    send_msg_type_open_bash(sock_fd, cmd);
-    send_msg_type_win_size(sock_fd);
-    max = sock_fd;
-    if (pipe_fd[0] > max)
-      max = pipe_fd[0];
-    for(;;)
+    if (FD_ISSET(sock_fd, &writefds))
+      mdl_write(sock_fd);
+    if (FD_ISSET(sock_fd, &readfds))
+      mdl_read(NULL, sock_fd, rx_msg_cb, rx_err_cb);
+    }
+} 
+/*--------------------------------------------------------------------------*/
+
+/****************************************************************************/
+static void loop_cli(int sock_fd, char *cmd, char *src, char *dst)
+{
+  int pipe_fd[2];
+  int max = sock_fd;
+  if (mdl_open(sock_fd)) 
+    KOUT("Error too big fd\n");
+  if ((g_is_snd == 0) && (g_is_rcv == 0))
+    {
+    if (pipe(pipe_fd) < 0)
+      printf("Error pipe\n");
+    else if (tcgetattr(0, &g_orig_term) < 0)
+      printf("Error No pty\n");
+    else
       {
-      select_loop(sock_fd, pipe_fd[0], max);
+      if (pipe_fd[0] > max)
+        max = pipe_fd[0];
+      mdl_open(1); 
+      g_win_chg_write_fd = pipe_fd[1];
+      config_term();
+      config_sigs();
+      send_msg_type_open_pty(sock_fd, cmd);
+      send_msg_type_win_size(sock_fd);
+      for(;;)
+        select_loop_pty(sock_fd, pipe_fd[0], max);
+      }
+    }
+  else
+    {
+    if (g_is_snd)
+      {
+      if (!send_msg_type_open_snd(sock_fd, src, dst))
+        {
+        for(;;)
+          select_loop_snd_rcv(sock_fd);
+        }
+      }
+    else
+      {
+      if (!send_msg_type_open_rcv(sock_fd, src, dst))
+        {
+        for(;;)
+          select_loop_snd_rcv(sock_fd);
+        }
       }
     }
 }
@@ -319,19 +399,26 @@ static void loop_cli(int sock_fd, char *cmd)
 static void usage(char *name)
 {
   printf("\n%s <vsock_cid> <vsock_port>", name);
-  printf("\n%s <vsock_cid> <vsock_port> -c \"<cmd>\"\n", name);
+  printf("\n%s <vsock_cid> <vsock_port> -cmd \"<cmd + params>\"", name);
+  printf("\n%s <vsock_cid> <vsock_port> -snd <loc_src> <rem_dst_dir>\n", name);
+  printf("\n%s <vsock_cid> <vsock_port> -rcv <rem_src> <loc_dst_dir>\n", name);
   printf("\n\t or for tests:\n");
   printf("\n%s -i <ip> <port>", name);
-  printf("\n%s -i <ip> <port> -c \"<cmd>\"", name);
+  printf("\n%s -i <ip> <port> -cmd \"<cmd + params>\"", name);
+  printf("\n%s -i <ip> <port> -snd <loc_src> <rem_dst_dir>\n", name);
+  printf("\n%s -i <ip> <port> -rcv <rem_src> <loc_dst_dir>\n", name);
   printf("\n%s -u <unix_sock>", name);
-  printf("\n%s -u <unix_sock> -c \"<cmd>\"", name);
+  printf("\n%s -u <unix_sock> -cmd \"<cmd + params>\"", name);
+  printf("\n%s -u <unix_sock> -snd <loc_src> <rem_dst_dir>\n", name);
+  printf("\n%s -u <unix_sock> -rcv <rem_src> <loc_dst_dir>\n", name);
   printf("\n\n");
   exit(1);
 }
 /*--------------------------------------------------------------------------*/
 
 /****************************************************************************/
-static void main_usock(char *unix_sock_path, char *cmd)
+static void main_usock(char *unix_sock_path,
+                       char *cmd, char *src, char *dst)
 {
   int sock_fd;
   sock_fd = connect_usock(unix_sock_path);
@@ -339,12 +426,13 @@ static void main_usock(char *unix_sock_path, char *cmd)
     KOUT(" %s: %s\n", unix_sock_path, strerror(errno));
   if (cmd && (strlen(cmd) >= MAX_MSG_LEN))
     KOUT("%d %s", strlen(cmd), cmd);
-  loop_cli(sock_fd, cmd);
+  loop_cli(sock_fd, cmd, src, dst);
 }
 /*--------------------------------------------------------------------------*/
 
 /****************************************************************************/
-static void main_vsock(char *cid, char *port, char *cmd)
+static void main_vsock(char *cid, char *port,
+                       char *cmd, char *src, char *dst)
 {
   int sock_fd, vsock_cid, vsock_port;
   vsock_cid = mdl_parse_val(cid);
@@ -352,12 +440,13 @@ static void main_vsock(char *cid, char *port, char *cmd)
   sock_fd = connect_vsock(vsock_cid, vsock_port);
   if (cmd && (strlen(cmd) >= MAX_MSG_LEN))
     KOUT("%d %s", strlen(cmd), cmd);
-  loop_cli(sock_fd, cmd);
+  loop_cli(sock_fd, cmd, src, dst);
 }
 /*--------------------------------------------------------------------------*/
 
 /****************************************************************************/
-static void main_isock(char *ip, char *port, char *cmd)
+static void main_isock(char *ip, char *port,
+                       char *cmd, char *src, char *dst)
 {
   int sock_fd, ip_num, port_num;
   if (ip_string_to_int(&ip_num, ip))
@@ -366,7 +455,37 @@ static void main_isock(char *ip, char *port, char *cmd)
   sock_fd = connect_isock(ip, ip_num, port_num);
   if (cmd && (strlen(cmd) >= MAX_MSG_LEN))
     KOUT("%d %s", strlen(cmd), cmd);
-  loop_cli(sock_fd, cmd);
+  loop_cli(sock_fd, cmd, src, dst);
+}
+/*--------------------------------------------------------------------------*/
+
+/****************************************************************************/
+static int get_params(int ac, char **av, char **cmd, char **src, char **dst)
+{
+  int result = -1;
+  *cmd = NULL; *src = NULL; *dst = NULL;
+  if (ac == 0)
+    result = 0;
+  if ((ac == 2) && !strcmp(av[0], "-cmd"))
+    {
+    *cmd = av[1];
+    result = 0;
+    }
+  else if ((ac == 3) && !strcmp(av[0], "-snd"))
+    {
+    g_is_snd = 1;
+    *src = av[1];
+    *dst = av[2];
+    result = 0;
+    }
+  else if ((ac == 3) && !strcmp(av[0], "-rcv"))
+    {
+    g_is_rcv = 1;
+    *src = av[1];
+    *dst = av[2];
+    result = 0;
+    }
+  return result;
 }
 /*--------------------------------------------------------------------------*/
 
@@ -374,38 +493,28 @@ static void main_isock(char *ip, char *port, char *cmd)
 int main(int argc, char **argv)
 {
   char unix_sock_path[MAX_PATH_LEN];
-  char *cmd;
+  char *cmd, *src, *dst;
+  g_is_snd = 0;
+  g_is_rcv = 0;
   if (argc < 3)
     usage(argv[0]);
   if (!strcmp(argv[1], "-u"))
     {
-    if (argc == 3)
-      cmd = NULL;
-    else if ((argc == 5) && !strcmp(argv[3], "-c"))
-      cmd = argv[4];
-    else
+    if (get_params(argc-3, &(argv[3]), &cmd, &src, &dst))
       usage(argv[0]);
-    main_usock(argv[2], cmd);
+    main_usock(argv[2], cmd, src, dst);
     }
   else if (!strcmp(argv[1], "-i"))
     {
-    if (argc == 4)
-      cmd = NULL;
-    else if ((argc == 6) && !strcmp(argv[4], "-c"))
-      cmd = argv[5];
-    else
+    if (get_params(argc-4, &(argv[4]), &cmd, &src, &dst))
       usage(argv[0]);
-    main_isock(argv[2], argv[3], cmd);
+    main_isock(argv[2], argv[3], cmd, src, dst);
     }
   else
     {
-    if (argc == 3)
-      cmd = NULL;
-    else if ((argc == 5) && !strcmp(argv[3], "-c"))
-      cmd = argv[4];
-    else
+    if (get_params(argc-3, &(argv[3]), &cmd, &src, &dst))
       usage(argv[0]);
-    main_vsock(argv[1], argv[2], cmd);
+    main_vsock(argv[1], argv[2], cmd, src, dst);
     }
   return 0;
 }

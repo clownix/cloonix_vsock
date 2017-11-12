@@ -41,13 +41,16 @@
 
 enum
 {
-  msg_type_data = 7,
+  msg_type_data_pty = 7,
   msg_type_open_bash,
-  msg_type_open_bashcmd,
+  msg_type_open_cmd,
+  msg_type_open_cli_snd,
+  msg_type_open_cli_rcv,
+  msg_type_ready_to_snd,
+  msg_type_ready_to_rcv,
   msg_type_win_size,
-  msg_type_kill,
-  msg_type_data2cli,
-  msg_type_end2cli,
+  msg_type_data_cli,
+  msg_type_end_cli,
 };
 typedef struct t_msg
 {
@@ -69,7 +72,7 @@ int mdl_queue_write_saturated(int s);
 void mdl_write(int s);
 
 
-typedef void (*t_rx_msg_cb)(void *ptr, t_msg *msg);
+typedef int (*t_rx_msg_cb)(void *ptr, t_msg *msg);
 typedef void (*t_rx_err_cb)(void *ptr, char *err);
 void mdl_read(void *ptr, int s, t_rx_msg_cb rx, t_rx_err_cb err);
 int mdl_open(int s);

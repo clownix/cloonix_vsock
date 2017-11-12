@@ -33,13 +33,25 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include "mdl.h"
+#include "scp_srv.h"
 #define MAX_FD_IDENT 100
+
+enum {
+  cli_type_bash = 0,
+  cli_type_cmd,
+  cli_type_scp_reg,
+  cli_type_scp_dir,
+};
 
 typedef struct t_cli
 {
   int pid;
   int sock_fd;
   int pty_master_fd;
+  int cli_type;
+  int cli_snd_fd;
+  int cli_rcv_fd;
+  char scp_path[MAX_PATH_LEN];
   struct t_cli *prev;
   struct t_cli *next;
 }t_cli;
@@ -57,10 +69,14 @@ static void cli_alloc(int fd)
   g_nb_cli += 1;
   cli->sock_fd = fd; 
   cli->pty_master_fd = -1;
+  cli->cli_snd_fd = -1;
+  cli->cli_rcv_fd = -1;
   if (g_cli_head)
     g_cli_head->prev = cli;
   cli->next = g_cli_head;
   g_cli_head = cli;
+
+KERR("%d %d", g_nb_cli, cli->sock_fd);
 }
 /*--------------------------------------------------------------------------*/
 
@@ -68,6 +84,7 @@ static void cli_alloc(int fd)
 static void cli_free(t_cli *cli)
 {
   g_nb_cli -= 1;
+KERR("%d %d", g_nb_cli, cli->sock_fd);
   if (cli->prev)
     cli->prev->next = cli->next;
   if (cli->next)
@@ -198,6 +215,16 @@ static int open_listen_isock(int isock_port)
 /*--------------------------------------------------------------------------*/
 
 /****************************************************************************/
+static void send_resp_cli(int type, t_cli *cli, char *resp)
+{
+  t_msg msg;
+  msg.type = type;
+  msg.len = sprintf(msg.buf, "%s", resp) + 1;
+  mdl_queue_write_msg(cli->sock_fd, &msg);
+}
+/*--------------------------------------------------------------------------*/
+
+/****************************************************************************/
 static void cli_pty_master_action(t_cli *cli)
 {
   t_msg msg;
@@ -211,7 +238,7 @@ static void cli_pty_master_action(t_cli *cli)
       }
     else
       {
-      msg.type = msg_type_data2cli;
+      msg.type = msg_type_data_cli;
       msg.len = len;
       mdl_queue_write_msg(cli->sock_fd, &msg);
       }
@@ -251,13 +278,17 @@ static void rx_err_cb (void *ptr, char *err)
 /*--------------------------------------------------------------------------*/
 
 /****************************************************************************/
-static void rx_msg_cb(void *ptr, t_msg *msg)
+static int rx_msg_cb(void *ptr, t_msg *msg)
 {
+  int result = 0;
   t_cli *cli = (t_cli *) ptr;
+  char resp[MAX_PATH_LEN];
+  char src[MAX_PATH_LEN];
+  char complete_dst[MAX_PATH_LEN];
   switch(msg->type)
     {
 
-    case msg_type_data :
+    case msg_type_data_pty :
       if (cli->pty_master_fd == -1)
         KOUT(" ");
       else
@@ -265,12 +296,38 @@ static void rx_msg_cb(void *ptr, t_msg *msg)
     break;
 
     case msg_type_open_bash :
+      cli->cli_type = cli_type_bash;
       bin_bash_pty(cli, NULL);
     break;
 
-    case msg_type_open_bashcmd :
+    case msg_type_open_cmd :
+      cli->cli_type = cli_type_cmd;
       bin_bash_pty(cli, msg->buf);
     break;
+
+    case msg_type_open_cli_snd :
+    case msg_type_open_cli_rcv :
+      if (sscanf(msg->buf, "%s %s", src, complete_dst) != 2)
+        {
+        KERR("%s",  msg->buf);
+        cli_free(cli);
+        result = -1;
+        }
+      else
+        {
+        if (msg->type == msg_type_open_cli_snd)
+          {
+          scp_cli_snd(&(cli->cli_snd_fd), src, complete_dst, resp);
+          send_resp_cli(msg_type_ready_to_rcv, cli, resp);
+          }
+        else
+          {
+          scp_cli_rcv(&(cli->cli_rcv_fd), src, complete_dst, resp);
+          send_resp_cli(msg_type_ready_to_snd, cli, resp);
+          }
+        }
+    break;
+
 
     case msg_type_win_size :
       if (cli->pty_master_fd != -1)
@@ -280,13 +337,10 @@ static void rx_msg_cb(void *ptr, t_msg *msg)
         }
     break;
 
-    case msg_type_kill :
-      KOUT("Kill server request from client");
-    break;
-
     default :
       KOUT("%d", msg->type);
       }
+  return result;
 }
 /*--------------------------------------------------------------------------*/
 
@@ -296,7 +350,7 @@ static void send_msg_type_end(int s, char status)
 {
   t_msg msg;
   memset(&msg, 0, sizeof(t_msg));
-  msg.type = msg_type_end2cli;
+  msg.type = msg_type_end_cli;
   msg.len = 1;
   msg.buf[0] = status;
   mdl_queue_write_msg(s, &msg);
@@ -321,11 +375,6 @@ static void sig_evt_action(int sig_read_fd)
         {
         if (cur->pid == pid)
           {
-          if (cur->pty_master_fd != -1)
-            {
-            close(cur->pty_master_fd);
-            cur->pty_master_fd = -1;
-            }
           if (WIFEXITED(status))
             exstat = WEXITSTATUS(status);
           else
