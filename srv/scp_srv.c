@@ -21,6 +21,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include "mdl.h"
 
@@ -71,23 +72,103 @@ static int scp_rx_open_rcv(char *src, char *complete_dst, char *resp)
 }
 /*--------------------------------------------------------------------------*/
 
+
 /*****************************************************************************/
-void scp_cli_snd(int *fd, char *src, char *complete_dst, char *resp)
+static void scp_cli_snd(int *fd, char *src, char *complete_dst, char *resp)
 {
   if (!scp_rx_open_snd(src, complete_dst, resp))
-    KERR("OOOKKK SND %s %s %s", src, complete_dst, resp); 
-  else
-    KERR("KKK SND %s %s %s", src, complete_dst, resp); 
+    {
+    *fd = open(complete_dst, O_CREAT|O_EXCL|O_WRONLY, 0655);
+    if (*fd == -1)
+      {
+      resp[0] = 'K';
+      resp[1] = 'O';
+      KERR("%s %d", complete_dst, errno);
+      }
+    }
 }
 /*--------------------------------------------------------------------------*/
 
 /*****************************************************************************/
-void scp_cli_rcv(int *fd, char *src, char *complete_dst, char *resp)
+static void scp_cli_rcv(int *fd, char *src, char *complete_dst, char *resp)
 { 
   if (!scp_rx_open_rcv(src, complete_dst, resp))
-    KERR("OOOKKK RCV %s %s %s", src, complete_dst, resp); 
+    *fd = open(src, O_RDONLY);
+    if (*fd == -1)
+      {
+      resp[0] = 'K';
+      resp[1] = 'O';
+      KERR("%s %d", src, errno);
+      }
+}
+/*--------------------------------------------------------------------------*/
+
+/****************************************************************************/
+static void send_resp_cli(int type, int sock_fd, char *resp)
+{
+  t_msg msg;
+  msg.type = type;
+  msg.len = sprintf(msg.buf, "%s", resp) + 1;
+  if (mdl_queue_write_msg(sock_fd, &msg))
+    KERR("%d", msg.len);
+}
+/*--------------------------------------------------------------------------*/
+
+/****************************************************************************/
+void recv_scp_data_end(int scp_fd, int sock_fd)
+{
+  t_msg msg;
+  if (scp_fd == -1)
+    KERR(" ");
+  close(scp_fd);
+  scp_fd = -1;
+  msg.type = msg_type_scp_data_end_ack;
+  msg.len = 0;
+  if (mdl_queue_write_msg(sock_fd, &msg))
+    KERR("%d", msg.len);
+}
+/*--------------------------------------------------------------------------*/
+
+/****************************************************************************/
+void recv_scp_data(int scp_fd, t_msg *msg)
+{
+  int len;
+  if (scp_fd == -1)
+    KERR(" ");
   else
-    KERR("KKK RCV %s %s %s", src, complete_dst, resp); 
+    {
+    len = write(scp_fd, msg->buf, msg->len);
+    if ((len < 0) || (len != msg->len))
+      KERR("%d %d %d", len, msg->len, errno);
+    }
+}
+/*--------------------------------------------------------------------------*/
+
+/*****************************************************************************/
+int recv_scp_open(int type, int sock_fd, int *cli_scp_fd, char *buf)
+{
+  int result = 0;
+  char resp[MAX_PATH_LEN];
+  char src[MAX_PATH_LEN];
+  char complete_dst[MAX_PATH_LEN];
+  if (sscanf(buf, "%s %s", src, complete_dst) != 2)
+    {
+    KERR("%s",  buf);
+    result = -1;
+    }
+  else
+    {
+    if (type == msg_type_scp_open_snd)
+      {
+      scp_cli_snd(cli_scp_fd, src, complete_dst, resp);
+      send_resp_cli(msg_type_scp_ready_to_rcv, sock_fd, resp);
+      }
+    else
+      {
+      scp_cli_rcv(cli_scp_fd, src, complete_dst, resp);
+      send_resp_cli(msg_type_scp_ready_to_snd, sock_fd, resp);
+      }
+    }
 }
 /*--------------------------------------------------------------------------*/
 

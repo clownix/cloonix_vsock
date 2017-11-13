@@ -179,7 +179,8 @@ int mdl_queue_write_msg(int s, t_msg *msg)
 /*--------------------------------------------------------------------------*/
 
 /****************************************************************************/
-static void do_cb(t_mdl *mdl, void *ptr, t_rx_msg_cb rx_cb, t_rx_err_cb err_cb)
+static void do_cb(t_mdl *mdl, void *ptr, int fd, 
+                  t_rx_msg_cb rx_cb, t_rx_err_cb err_cb)
 {
   t_msg *msg = (t_msg *) mdl->bufrx;
   char *tmp;
@@ -196,7 +197,7 @@ static void do_cb(t_mdl *mdl, void *ptr, t_rx_msg_cb rx_cb, t_rx_err_cb err_cb)
         {
         if (msg->cafe != 0xCAFEDECA)
           KOUT("header id is %X", msg->cafe);
-        if (rx_cb(ptr, msg))
+        if (rx_cb(ptr, fd, msg))
           return;
         done = msg->len + g_msg_header_len;
         msg = (t_msg *)((char *)msg + done);
@@ -261,13 +262,13 @@ void mdl_read(void *ptr, int s, t_rx_msg_cb rx_cb, t_rx_err_cb err_cb)
       else
         {
         mdl->rxoffst += len;
-        do_cb(mdl, ptr, rx_cb, err_cb);
+        do_cb(mdl, ptr, s, rx_cb, err_cb);
         }
       }
     else
       {
       KERR("%d", mdl->rxoffst);
-      do_cb(mdl, ptr, rx_cb, err_cb);
+      do_cb(mdl, ptr, s, rx_cb, err_cb);
       }
     }
 }

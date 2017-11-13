@@ -44,13 +44,16 @@ enum
   msg_type_data_pty = 7,
   msg_type_open_bash,
   msg_type_open_cmd,
-  msg_type_open_cli_snd,
-  msg_type_open_cli_rcv,
-  msg_type_ready_to_snd,
-  msg_type_ready_to_rcv,
   msg_type_win_size,
   msg_type_data_cli,
   msg_type_end_cli,
+  msg_type_scp_open_snd,
+  msg_type_scp_open_rcv,
+  msg_type_scp_ready_to_snd,
+  msg_type_scp_ready_to_rcv,
+  msg_type_scp_data,
+  msg_type_scp_data_end,
+  msg_type_scp_data_end_ack,
 };
 typedef struct t_msg
 {
@@ -72,7 +75,7 @@ int mdl_queue_write_saturated(int s);
 void mdl_write(int s);
 
 
-typedef int (*t_rx_msg_cb)(void *ptr, t_msg *msg);
+typedef int (*t_rx_msg_cb)(void *ptr, int fd, t_msg *msg);
 typedef void (*t_rx_err_cb)(void *ptr, char *err);
 void mdl_read(void *ptr, int s, t_rx_msg_cb rx, t_rx_err_cb err);
 int mdl_open(int s);

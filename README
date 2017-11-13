@@ -3,6 +3,8 @@ Software to help using VirtioVsock
 
 Provides a distant bash from a virtual guest to its host going through
 the virtio-vsock host/guest communications device.
+Provides a distant command launching through the virtio-vsock host/guest.
+Provides also regular file copy through the virtio-vsock host/guest.
 
 
 To use, first create the server and client binaries:
@@ -16,48 +18,85 @@ sudo rmmod vmw_vsock_vmci_transport
 sudo rmmod vmw_vsock_virtio_transport_common
 sudo rmmod vsock
 sudo modprobe vhost_vsock
-ls -l /dev/vhost-vsock
-sudo chmod 666 /dev/vhost-vsock
-ls -l /dev/vhost-vsock
+sudo chmod 0666 /dev/vhost-vsock
 
-sudo ./vsock_srv -v 777
+sudo ./vsock_srv 777
 
-
-Launch your virtual env, the qemu must have the following in its call:
+Launch your virtual env, the qemu must have the following device:
 -device vhost-vsock-pci,id=vhost-vsock-pci0,guest-cid=4
-for me, I use last cloonix, as follows:
+
+for me, I use cloonix 38.1 or after, as follows:
 
 cloonix_net nemo
 cloonix_gui nemo
-cloonix_cli nemo add kvm cloon 2000 2 2 stretch.qcow2 --vhost-vsock
-cloonix_scp nemo vsock_cli cloon:
-cloonix_ssh nemo cloon
+cloonix_cli nemo add kvm Cloon1 2000 2 2 stretch.qcow2 --vhost-vsock
 
-In the cloon virtual machine, as root you can do:
+if you have an error do:
+sudo cat /var/log/user.log | grep qemu
 
-./vsock_cli -v 2 777
+  "failed to open vhost device: Unknown error -2"
+  happens when /dev/vhost_vsock does not exist
+
+  "failed to open vhost device: Unknown error -13"
+  happens when the qemu software cannot read/write /dev/vhost_vsock
+
+
+cloonix_scp nemo vsock_cli Cloon1:
+cloonix_ssh nemo Cloon1
+
+In the Cloon1 virtual machine:
+
+./vsock_cli 2 777
 
 And you get a pseudo-console as root on the host.
+
 
 In case of unexpected events with this software, do:
 sudo cat /var/log/user.log
 
 For bug reports use github or mail clownix at clownix.net.
 
-To test the software without vsock, you can do:
+
+#--------------------------------------------------------------------
+This tool can be tested with unix or ip sockets also, here are the
+possible commands for the server:
+
+./vsock_srv <vsock_port>
+
+	 or for tests:
+
+./vsock_srv -i <inet_port>
+./vsock_srv -u <unix_sock_path>
+
+#--------------------------------------------------------------------
+Here are the possible commands for the client:
+
+./vsock_cli <vsock_cid> <vsock_port>
+./vsock_cli <vsock_cid> <vsock_port> -cmd "<cmd + params>"
+./vsock_cli <vsock_cid> <vsock_port> -snd <loc_src> <rem_dst_dir>
+./vsock_cli <vsock_cid> <vsock_port> -rcv <rem_src> <loc_dst_dir>
+
+	 or for tests:
+
+./vsock_cli -i <ip> <port>
+./vsock_cli -i <ip> <port> -cmd "<cmd + params>"
+./vsock_cli -i <ip> <port> -snd <loc_src> <rem_dst_dir>
+./vsock_cli -i <ip> <port> -rcv <rem_src> <loc_dst_dir>
+
+./vsock_cli -u <unix_sock>
+./vsock_cli -u <unix_sock> -cmd "<cmd + params>"
+./vsock_cli -u <unix_sock> -snd <loc_src> <rem_dst_dir>
+./vsock_cli -u <unix_sock> -rcv <rem_src> <loc_dst_dir>
+
+#--------------------------------------------------------------------
+Example:
 
 ./vsock_srv -u /tmp/whatever
 ./vsock_cli -u /tmp/whatever
 
-or
-
 ./vsock_srv -i 127.0.0.1 7777
 ./vsock_cli -i 127.0.0.1 7777
 
+#--------------------------------------------------------------------
 
-
-
-
-
-sudo cat /var/log/user.log 
 

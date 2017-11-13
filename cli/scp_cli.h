@@ -15,6 +15,8 @@
 /*  along with this program.  If not, see <http://www.gnu.org/licenses/>.    */
 /*                                                                           */
 /*****************************************************************************/
-int scp_open_snd(char *src, char *dst, char *complete_dst);
-int scp_open_rcv(char *src, char *dst, char *complete_dst);
+void recv_scp_data(t_msg *msg);
+void recv_scp_data_end(int sock_fd);
+void recv_scp_ready(int type, t_msg *msg);
+void scp_loop(int is_snd, int sock_fd, char *src, char *dst);
 /*--------------------------------------------------------------------------*/

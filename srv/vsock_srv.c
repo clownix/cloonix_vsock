@@ -31,6 +31,8 @@
 #include <linux/vm_sockets.h>
 #include <netinet/in.h>
 #include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <sys/wait.h>
 #include "mdl.h"
 #include "scp_srv.h"
@@ -49,8 +51,7 @@ typedef struct t_cli
   int sock_fd;
   int pty_master_fd;
   int cli_type;
-  int cli_snd_fd;
-  int cli_rcv_fd;
+  int cli_scp_fd;
   char scp_path[MAX_PATH_LEN];
   struct t_cli *prev;
   struct t_cli *next;
@@ -69,13 +70,11 @@ static void cli_alloc(int fd)
   g_nb_cli += 1;
   cli->sock_fd = fd; 
   cli->pty_master_fd = -1;
-  cli->cli_snd_fd = -1;
-  cli->cli_rcv_fd = -1;
+  cli->cli_scp_fd = -1;
   if (g_cli_head)
     g_cli_head->prev = cli;
   cli->next = g_cli_head;
   g_cli_head = cli;
-
 KERR("%d %d", g_nb_cli, cli->sock_fd);
 }
 /*--------------------------------------------------------------------------*/
@@ -215,16 +214,6 @@ static int open_listen_isock(int isock_port)
 /*--------------------------------------------------------------------------*/
 
 /****************************************************************************/
-static void send_resp_cli(int type, t_cli *cli, char *resp)
-{
-  t_msg msg;
-  msg.type = type;
-  msg.len = sprintf(msg.buf, "%s", resp) + 1;
-  mdl_queue_write_msg(cli->sock_fd, &msg);
-}
-/*--------------------------------------------------------------------------*/
-
-/****************************************************************************/
 static void cli_pty_master_action(t_cli *cli)
 {
   t_msg msg;
@@ -234,13 +223,16 @@ static void cli_pty_master_action(t_cli *cli)
     len = read(cli->pty_master_fd, msg.buf, sizeof(msg.buf));
     if (len <= 0)
       {
-      cli_free(cli);
+      mdl_close(cli->pty_master_fd);
+      close(cli->pty_master_fd);
+      cli->pty_master_fd = -1;
       }
     else
       {
       msg.type = msg_type_data_cli;
       msg.len = len;
-      mdl_queue_write_msg(cli->sock_fd, &msg);
+      if (mdl_queue_write_msg(cli->sock_fd, &msg))
+        KERR("%d", len);
       }
     }
 }
@@ -273,26 +265,37 @@ static void listen_socket_action(int listen_sock_fd)
 static void rx_err_cb (void *ptr, char *err)
 {
   t_cli *cli = (t_cli *) ptr;
+KERR(" ");
   cli_free(cli);
 }
 /*--------------------------------------------------------------------------*/
 
 /****************************************************************************/
-static int rx_msg_cb(void *ptr, t_msg *msg)
+static void send_msg_type_end(int s, char status)
+{
+  t_msg msg;
+  memset(&msg, 0, sizeof(t_msg));
+  msg.type = msg_type_end_cli;
+  msg.len = 1;
+  msg.buf[0] = status;
+  if (mdl_queue_write_msg(s, &msg))
+    KERR("%d", msg.len);
+}
+/*--------------------------------------------------------------------------*/
+
+/****************************************************************************/
+static int rx_msg_cb(void *ptr, int sock_fd, t_msg *msg)
 {
   int result = 0;
   t_cli *cli = (t_cli *) ptr;
-  char resp[MAX_PATH_LEN];
-  char src[MAX_PATH_LEN];
-  char complete_dst[MAX_PATH_LEN];
   switch(msg->type)
     {
 
     case msg_type_data_pty :
       if (cli->pty_master_fd == -1)
         KOUT(" ");
-      else
-        mdl_queue_write_raw(cli->pty_master_fd, msg->buf, msg->len);
+      else if (mdl_queue_write_raw(cli->pty_master_fd, msg->buf, msg->len))
+        KERR("%d", msg->len);
     break;
 
     case msg_type_open_bash :
@@ -305,30 +308,6 @@ static int rx_msg_cb(void *ptr, t_msg *msg)
       bin_bash_pty(cli, msg->buf);
     break;
 
-    case msg_type_open_cli_snd :
-    case msg_type_open_cli_rcv :
-      if (sscanf(msg->buf, "%s %s", src, complete_dst) != 2)
-        {
-        KERR("%s",  msg->buf);
-        cli_free(cli);
-        result = -1;
-        }
-      else
-        {
-        if (msg->type == msg_type_open_cli_snd)
-          {
-          scp_cli_snd(&(cli->cli_snd_fd), src, complete_dst, resp);
-          send_resp_cli(msg_type_ready_to_rcv, cli, resp);
-          }
-        else
-          {
-          scp_cli_rcv(&(cli->cli_rcv_fd), src, complete_dst, resp);
-          send_resp_cli(msg_type_ready_to_snd, cli, resp);
-          }
-        }
-    break;
-
-
     case msg_type_win_size :
       if (cli->pty_master_fd != -1)
         {
@@ -337,26 +316,32 @@ static int rx_msg_cb(void *ptr, t_msg *msg)
         }
     break;
 
+    case msg_type_scp_open_snd :
+    case msg_type_scp_open_rcv :
+      if (recv_scp_open(msg->type, sock_fd, &(cli->cli_scp_fd), msg->buf)) 
+        {
+KERR(" ");
+        cli_free(cli);
+        result = -1;
+        }
+    break;
+
+    case msg_type_scp_data:
+      recv_scp_data(cli->cli_scp_fd, msg);
+      break;
+    case msg_type_scp_data_end:
+      recv_scp_data_end(cli->cli_scp_fd, sock_fd);
+      break;
+    case msg_type_scp_data_end_ack:
+      send_msg_type_end(sock_fd, 0);
+      break;
+
     default :
       KOUT("%d", msg->type);
       }
   return result;
 }
 /*--------------------------------------------------------------------------*/
-
-
-/****************************************************************************/
-static void send_msg_type_end(int s, char status)
-{
-  t_msg msg;
-  memset(&msg, 0, sizeof(t_msg));
-  msg.type = msg_type_end_cli;
-  msg.len = 1;
-  msg.buf[0] = status;
-  mdl_queue_write_msg(s, &msg);
-}
-/*--------------------------------------------------------------------------*/
-
 
 /****************************************************************************/
 static void sig_evt_action(int sig_read_fd)
@@ -380,6 +365,7 @@ static void sig_evt_action(int sig_read_fd)
           else
             exstat = 1;
           send_msg_type_end(cur->sock_fd, exstat);
+KERR(" ");
           break;
           }
         cur = cur->next;
@@ -480,6 +466,9 @@ static void server_loop(int listen_sock_fd, int sig_read_fd)
         {
         if (FD_ISSET(cur->pty_master_fd, &readfds))
           cli_pty_master_action(cur);
+        }
+      if (cur->pty_master_fd != -1)
+        {
         if (FD_ISSET(cur->pty_master_fd, &writefds))
           mdl_write(cur->pty_master_fd);
         }
@@ -557,23 +546,26 @@ int main(int argc, char **argv)
     }
   else if(argc != 3)
     usage(argv[0]);
-  if (!strcmp(argv[1], "-u"))
-    {
-    memset(unix_sock_path, 0, MAX_PATH_LEN);
-    strncpy(unix_sock_path, argv[2], MAX_PATH_LEN-1);
-    listen_sock_fd = open_listen_usock(unix_sock_path);
-    if (listen_sock_fd < 0)
-      KOUT(" %s: %s\n", unix_sock_path, strerror(errno));
-    }
-  else if (!strcmp(argv[1], "-i"))
-    {
-    port = mdl_parse_val(argv[2]);
-    listen_sock_fd = open_listen_isock(port);
-    if (listen_sock_fd < 0)
-      KOUT(" %d: %s\n", port, strerror(errno));
-    }
   else
-    usage(argv[0]);
+    {
+    if (!strcmp(argv[1], "-u"))
+      {
+      memset(unix_sock_path, 0, MAX_PATH_LEN);
+      strncpy(unix_sock_path, argv[2], MAX_PATH_LEN-1);
+      listen_sock_fd = open_listen_usock(unix_sock_path);
+      if (listen_sock_fd < 0)
+        KOUT(" %s: %s\n", unix_sock_path, strerror(errno));
+      }
+    else if (!strcmp(argv[1], "-i"))
+      {
+      port = mdl_parse_val(argv[2]);
+      listen_sock_fd = open_listen_isock(port);
+      if (listen_sock_fd < 0)
+        KOUT(" %d: %s\n", port, strerror(errno));
+      }
+    else
+      usage(argv[0]);
+    }
 
   if (listen_sock_fd >= 0)
     vsock_srv(listen_sock_fd);
