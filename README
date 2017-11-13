@@ -1,10 +1,11 @@
 
 Software to help using VirtioVsock
 
-Provides a distant bash from a virtual guest to its host going through
+Provides a distant bash between virtual guest and host going through
 the virtio-vsock host/guest communications device.
-Provides a distant command launching through the virtio-vsock host/guest.
-Provides also regular file copy through the virtio-vsock host/guest.
+
+Also does distant non-interractive commands.
+Also provides regular file copy.
 
 
 To use, first create the server and client binaries:
@@ -22,7 +23,7 @@ sudo chmod 0666 /dev/vhost-vsock
 
 sudo ./vsock_srv 777
 
-Launch your virtual env, the qemu must have the following device:
+Launch your virtual guest, the qemu must have the following device:
 -device vhost-vsock-pci,id=vhost-vsock-pci0,guest-cid=4
 
 for me, I use cloonix 38.1 or after, as follows:
@@ -39,7 +40,6 @@ sudo cat /var/log/user.log | grep qemu
 
   "failed to open vhost device: Unknown error -13"
   happens when the qemu software cannot read/write /dev/vhost_vsock
-
 
 cloonix_scp nemo vsock_cli Cloon1:
 cloonix_ssh nemo Cloon1
@@ -90,6 +90,9 @@ Here are the possible commands for the client:
 
 #--------------------------------------------------------------------
 Example:
+
+./vsock_srv 7777
+./vsock_cli 2 7777
 
 ./vsock_srv -u /tmp/whatever
 ./vsock_cli -u /tmp/whatever
