@@ -114,6 +114,36 @@ static void send_resp_cli(int type, int sock_fd, char *resp)
 }
 /*--------------------------------------------------------------------------*/
 
+
+/****************************************************************************/
+static void send_scp_data_end(int sock_fd)
+{
+  t_msg msg;
+  msg.type = msg_type_scp_data_end;
+  msg.len = 0;
+  if (mdl_queue_write_msg(sock_fd, &msg))
+    KERR("%d", msg.len);
+}
+/*--------------------------------------------------------------------------*/
+
+/****************************************************************************/
+static int send_scp_data(int scp_fd, int sock_fd)
+{
+  int result = -1;
+  t_msg msg;
+  int len = read(scp_fd, msg.buf, MAX_MSG_LEN);
+  if (len < 0)
+    KOUT("%d", errno);
+  if (len == MAX_MSG_LEN)
+    result = 0;
+  msg.type = msg_type_scp_data;
+  msg.len = len;
+  if (mdl_queue_write_msg(sock_fd, &msg))
+    KERR("%d", msg.len);
+  return result;
+}
+/*--------------------------------------------------------------------------*/
+
 /****************************************************************************/
 void recv_scp_data_end(int scp_fd, int sock_fd)
 {
@@ -169,6 +199,19 @@ int recv_scp_open(int type, int sock_fd, int *cli_scp_fd, char *buf)
       send_resp_cli(msg_type_scp_ready_to_snd, sock_fd, resp);
       }
     }
+}
+/*--------------------------------------------------------------------------*/
+
+/*****************************************************************************/
+int send_scp_to_cli(int scp_fd, int sock_fd)
+{
+  int result = 0;
+  if (send_scp_data(scp_fd, sock_fd))
+    {
+    send_scp_data_end(sock_fd);
+    result = -1;
+    }
+  return result;
 }
 /*--------------------------------------------------------------------------*/
 

@@ -51,7 +51,8 @@ typedef struct t_cli
   int sock_fd;
   int pty_master_fd;
   int cli_type;
-  int cli_scp_fd;
+  int scp_fd;
+  int scp_begin;
   char scp_path[MAX_PATH_LEN];
   struct t_cli *prev;
   struct t_cli *next;
@@ -70,12 +71,12 @@ static void cli_alloc(int fd)
   g_nb_cli += 1;
   cli->sock_fd = fd; 
   cli->pty_master_fd = -1;
-  cli->cli_scp_fd = -1;
+  cli->scp_fd = -1;
+  cli->scp_begin = 0;
   if (g_cli_head)
     g_cli_head->prev = cli;
   cli->next = g_cli_head;
   g_cli_head = cli;
-KERR("%d %d", g_nb_cli, cli->sock_fd);
 }
 /*--------------------------------------------------------------------------*/
 
@@ -83,7 +84,6 @@ KERR("%d %d", g_nb_cli, cli->sock_fd);
 static void cli_free(t_cli *cli)
 {
   g_nb_cli -= 1;
-KERR("%d %d", g_nb_cli, cli->sock_fd);
   if (cli->prev)
     cli->prev->next = cli->next;
   if (cli->next)
@@ -218,22 +218,19 @@ static void cli_pty_master_action(t_cli *cli)
 {
   t_msg msg;
   int len;
-  if (!mdl_queue_write_saturated(cli->sock_fd))
+  len = read(cli->pty_master_fd, msg.buf, sizeof(msg.buf));
+  if (len <= 0)
     {
-    len = read(cli->pty_master_fd, msg.buf, sizeof(msg.buf));
-    if (len <= 0)
-      {
-      mdl_close(cli->pty_master_fd);
-      close(cli->pty_master_fd);
-      cli->pty_master_fd = -1;
-      }
-    else
-      {
-      msg.type = msg_type_data_cli;
-      msg.len = len;
-      if (mdl_queue_write_msg(cli->sock_fd, &msg))
-        KERR("%d", len);
-      }
+    mdl_close(cli->pty_master_fd);
+    close(cli->pty_master_fd);
+    cli->pty_master_fd = -1;
+    }
+  else
+    {
+    msg.type = msg_type_data_cli;
+    msg.len = len;
+    if (mdl_queue_write_msg(cli->sock_fd, &msg))
+      KERR("%d", len);
     }
 }
 /*--------------------------------------------------------------------------*/
@@ -265,7 +262,6 @@ static void listen_socket_action(int listen_sock_fd)
 static void rx_err_cb (void *ptr, char *err)
 {
   t_cli *cli = (t_cli *) ptr;
-KERR(" ");
   cli_free(cli);
 }
 /*--------------------------------------------------------------------------*/
@@ -318,19 +314,21 @@ static int rx_msg_cb(void *ptr, int sock_fd, t_msg *msg)
 
     case msg_type_scp_open_snd :
     case msg_type_scp_open_rcv :
-      if (recv_scp_open(msg->type, sock_fd, &(cli->cli_scp_fd), msg->buf)) 
+      if (recv_scp_open(msg->type, sock_fd, &(cli->scp_fd), msg->buf)) 
         {
-KERR(" ");
         cli_free(cli);
         result = -1;
         }
     break;
 
     case msg_type_scp_data:
-      recv_scp_data(cli->cli_scp_fd, msg);
+      recv_scp_data(cli->scp_fd, msg);
       break;
     case msg_type_scp_data_end:
-      recv_scp_data_end(cli->cli_scp_fd, sock_fd);
+      recv_scp_data_end(cli->scp_fd, sock_fd);
+      break;
+    case msg_type_scp_data_begin:
+      cli->scp_begin = 1;
       break;
     case msg_type_scp_data_end_ack:
       send_msg_type_end(sock_fd, 0);
@@ -365,7 +363,6 @@ static void sig_evt_action(int sig_read_fd)
           else
             exstat = 1;
           send_msg_type_end(cur->sock_fd, exstat);
-KERR(" ");
           break;
           }
         cur = cur->next;
@@ -417,7 +414,13 @@ static void prepare_fd_set(int listen_sock_fd, int sig_read_fd,
   FD_SET(sig_read_fd, readfds);
   while(cur)
     {
-    FD_SET(cur->sock_fd, readfds);
+    if (cur->pty_master_fd != -1)
+      {
+      if (!mdl_queue_write_saturated(cur->pty_master_fd))
+        FD_SET(cur->sock_fd, readfds);
+      }
+    else
+      FD_SET(cur->sock_fd, readfds);
     if (cur->pty_master_fd != -1)
       {
       if (mdl_queue_write_not_empty(cur->pty_master_fd))
@@ -443,6 +446,20 @@ static void server_loop(int listen_sock_fd, int sig_read_fd)
   int max_fd;
   t_cli *next, *cur;
   fd_set readfds, writefds;
+  cur = g_cli_head;
+  while(cur)
+    {
+    if ((cur->scp_begin) && (cur->scp_fd != -1))
+      {
+      if (send_scp_to_cli(cur->scp_fd, cur->sock_fd))
+        {
+        close(cur->scp_fd);
+        cur->scp_begin = 0;
+        cur->scp_fd = -1;
+        }
+      }
+    cur = next;
+    }
   max_fd = get_max(listen_sock_fd, sig_read_fd);
   prepare_fd_set(listen_sock_fd, sig_read_fd, &readfds, &writefds);
   if (select(max_fd + 1, &readfds, &writefds, NULL, NULL) < 0)

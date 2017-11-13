@@ -53,6 +53,7 @@ enum
   msg_type_scp_ready_to_rcv,
   msg_type_scp_data,
   msg_type_scp_data_end,
+  msg_type_scp_data_begin,
   msg_type_scp_data_end_ack,
 };
 typedef struct t_msg

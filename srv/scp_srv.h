@@ -18,4 +18,5 @@
 void recv_scp_data_end(int scp_fd, int sock_fd);
 void recv_scp_data(int scp_fd, t_msg *msg);
 int recv_scp_open(int type, int sock_fd, int *cli_scp_fd, char *buf);
+int send_scp_to_cli(int scp_fd, int sock_fd);
 /*--------------------------------------------------------------------------*/

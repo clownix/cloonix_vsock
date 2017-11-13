@@ -125,6 +125,17 @@ static void send_scp_data_end(int sock_fd)
 /*--------------------------------------------------------------------------*/
 
 /****************************************************************************/
+static void send_scp_data_begin(int sock_fd)
+{
+  t_msg msg;
+  msg.type = msg_type_scp_data_begin;
+  msg.len = 0;
+  if (mdl_queue_write_msg(sock_fd, &msg))
+    KERR("%d", msg.len);
+}
+/*--------------------------------------------------------------------------*/
+
+/****************************************************************************/
 static int send_scp_data(int sock_fd)
 {
   int result = -1;
@@ -170,7 +181,7 @@ void recv_scp_data(t_msg *msg)
 /*--------------------------------------------------------------------------*/
 
 /****************************************************************************/
-void recv_scp_ready(int type, t_msg *msg)
+void recv_scp_ready(int sock_fd, int type, t_msg *msg)
 {
   char src[MAX_PATH_LEN];
   char complete_dst[MAX_PATH_LEN];
@@ -192,6 +203,7 @@ void recv_scp_ready(int type, t_msg *msg)
     g_scp_fd = open(complete_dst, O_CREAT|O_EXCL|O_WRONLY, 0655);
     if (g_scp_fd == -1)
       KOUT("%s %d", complete_dst, errno);
+    send_scp_data_begin(sock_fd);
     }
 }
 /*--------------------------------------------------------------------------*/
@@ -215,7 +227,7 @@ static int rx_scp_msg_cb(void *ptr, int sock_fd, t_msg *msg)
       break;
     case msg_type_scp_ready_to_snd:
     case msg_type_scp_ready_to_rcv:
-      recv_scp_ready(msg->type, msg);
+      recv_scp_ready(sock_fd, msg->type, msg);
       break;
     case msg_type_scp_data:
       recv_scp_data(msg);
@@ -224,7 +236,6 @@ static int rx_scp_msg_cb(void *ptr, int sock_fd, t_msg *msg)
       recv_scp_data_end(sock_fd);
       break;
     case msg_type_scp_data_end_ack:
-KERR(" ");
       exit(0);
       break;
     default:
@@ -254,6 +265,8 @@ static void select_loop_snd_rcv(int is_snd, int sock_fd)
       close(g_scp_fd);
       g_scp_fd = -1;
       }
+    if (mdl_queue_write_not_empty(sock_fd))
+      FD_SET(sock_fd, &writefds);
     }
   n = select(sock_fd + 1, &readfds, &writefds, NULL, NULL);
   if (n <= 0)
