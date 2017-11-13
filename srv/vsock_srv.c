@@ -36,6 +36,7 @@
 #include <sys/wait.h>
 #include "mdl.h"
 #include "scp_srv.h"
+#include "x11_fwd.h"
 #define MAX_FD_IDENT 100
 
 enum {
@@ -51,6 +52,8 @@ typedef struct t_cli
   int sock_fd;
   int pty_master_fd;
   int cli_type;
+  int x11_fwd_listen_fd;
+  int x11_fwd_fd;
   int scp_fd;
   int scp_begin;
   char scp_path[MAX_PATH_LEN];
@@ -71,6 +74,8 @@ static void cli_alloc(int fd)
   g_nb_cli += 1;
   cli->sock_fd = fd; 
   cli->pty_master_fd = -1;
+  cli->x11_fwd_listen_fd = -1;
+  cli->x11_fwd_fd = -1;
   cli->scp_fd = -1;
   cli->scp_begin = 0;
   if (g_cli_head)
@@ -117,7 +122,7 @@ static void nonblocking(int fd)
 static void bin_bash_pty(t_cli *cli, char *cmd)
 {
   char *argv[5];
-  char *env[] = {"PATH=/usr/sbin:/usr/bin:/sbin:/bin", NULL};
+  char *env[] = {"PATH=/usr/sbin:/usr/bin:/sbin:/bin",UNIX_X11_DISPLAY,NULL};
   cli->pid = forkpty(&(cli->pty_master_fd), NULL, NULL, NULL);
   if (cli->pid == 0)
     {
@@ -146,7 +151,7 @@ static void bin_bash_pty(t_cli *cli, char *cmd)
 /*--------------------------------------------------------------------------*/
 
 /****************************************************************************/
-static int open_listen_usock(char *name)
+int open_listen_usock(char *name)
 {
   int s, result = -1;
   struct sockaddr_un sockun;
@@ -195,7 +200,7 @@ static int open_listen_vsock(int vsock_port)
 /****************************************************************************/
 static int open_listen_isock(int isock_port)
 {
-  int s;
+  int s, optval=1;
   struct sockaddr_in isock;
   memset(&isock, 0, sizeof(isock));
   s = socket(AF_INET, SOCK_STREAM, 0);
@@ -204,6 +209,8 @@ static int open_listen_isock(int isock_port)
   isock.sin_family = AF_INET;
   isock.sin_addr.s_addr = htonl(INADDR_ANY);
   isock.sin_port = htons(isock_port);
+  if (setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0)
+    KOUT(" ");
   if (bind(s, (struct sockaddr*)&isock, sizeof(isock)) < 0)
     KOUT("%s", strerror(errno));
   if (listen(s, 40) < 0)
@@ -280,6 +287,17 @@ static void send_msg_type_end(int s, char status)
 /*--------------------------------------------------------------------------*/
 
 /****************************************************************************/
+static void send_msg_type_x11_fwd_init(int s, char *txt)
+{
+  t_msg msg;
+  msg.type = msg_type_x11_fwd_init;
+  msg.len = sprintf(msg.buf, "%s", txt) + 1;
+  if (mdl_queue_write_msg(s, &msg))
+    KERR("%d", msg.len);
+}
+/*--------------------------------------------------------------------------*/
+
+/****************************************************************************/
 static int rx_msg_cb(void *ptr, int sock_fd, t_msg *msg)
 {
   int result = 0;
@@ -332,6 +350,21 @@ static int rx_msg_cb(void *ptr, int sock_fd, t_msg *msg)
       break;
     case msg_type_scp_data_end_ack:
       send_msg_type_end(sock_fd, 0);
+      break;
+
+    case msg_type_x11_fwd_init:
+      if (!x11_listen(&(cli->x11_fwd_listen_fd)))
+        send_msg_type_x11_fwd_init(sock_fd, "OK");
+      else
+        send_msg_type_x11_fwd_init(sock_fd, "KO");
+      break;
+
+    case msg_type_x11_fwd_data:
+      if (x11_recv_data(cli->x11_fwd_fd, msg->buf, msg->len))
+        {
+        close(cli->x11_fwd_fd);
+        cli->x11_fwd_fd = -1;
+        }
       break;
 
     default :
@@ -397,6 +430,10 @@ static int get_max(int listen_sock_fd, int sig_read_fd)
       result = cur->sock_fd;
     if (cur->pty_master_fd > result)
       result = cur->pty_master_fd;
+    if (cur->x11_fwd_listen_fd > result)
+      result = cur->x11_fwd_listen_fd;
+    if (cur->x11_fwd_fd > result)
+      result = cur->x11_fwd_fd;
     cur = cur->next;
     }
   return result;
@@ -414,6 +451,10 @@ static void prepare_fd_set(int listen_sock_fd, int sig_read_fd,
   FD_SET(sig_read_fd, readfds);
   while(cur)
     {
+    if (cur->x11_fwd_listen_fd != -1)
+      FD_SET(cur->x11_fwd_listen_fd, readfds);
+    if (cur->x11_fwd_fd != -1)
+      FD_SET(cur->x11_fwd_fd, readfds);
     if (cur->pty_master_fd != -1)
       {
       if (!mdl_queue_write_saturated(cur->pty_master_fd))
@@ -491,6 +532,16 @@ static void server_loop(int listen_sock_fd, int sig_read_fd)
         }
       if (FD_ISSET(cur->sock_fd, &readfds))
         mdl_read((void *)cur, cur->sock_fd, rx_msg_cb, rx_err_cb);
+      if (FD_ISSET(cur->x11_fwd_listen_fd, &readfds))
+        x11_listen_action(cur->x11_fwd_listen_fd, &(cur->x11_fwd_fd));
+      if (FD_ISSET(cur->x11_fwd_fd, &readfds))
+        {
+        if (x11_action(cur->x11_fwd_fd, cur->sock_fd))
+          {
+          close(cur->x11_fwd_fd);
+          cur->x11_fwd_fd = -1;
+          }
+        }
       cur = next;
       }
     }

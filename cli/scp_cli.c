@@ -200,7 +200,7 @@ void recv_scp_ready(int sock_fd, int type, t_msg *msg)
     }
   else
     {
-    g_scp_fd = open(complete_dst, O_CREAT|O_EXCL|O_WRONLY, 0655);
+    g_scp_fd = open(complete_dst, O_CREAT|O_EXCL|O_WRONLY, 0644);
     if (g_scp_fd == -1)
       KOUT("%s %d", complete_dst, errno);
     send_scp_data_begin(sock_fd);

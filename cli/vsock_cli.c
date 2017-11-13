@@ -36,10 +36,13 @@
 #include <netinet/in.h>
 #include "mdl.h"
 #include "scp_cli.h"
+#include "x11_fwd.h"
 
 static struct termios g_orig_term;
 static struct termios g_cur_term;
 static int g_win_chg_write_fd;
+static int g_x11_fwd;
+static int g_x11_fd;
 static char g_sock_path[MAX_PATH_LEN];
 static int g_is_snd;
 static int g_is_rcv;
@@ -97,6 +100,17 @@ static void send_msg_type_win_size(int s)
   msg.type = msg_type_win_size;
   msg.len = sizeof(struct winsize);
   ioctl(0, TIOCGWINSZ, msg.buf);
+  if (mdl_queue_write_msg(s, &msg))
+    KERR("%d", msg.len);
+}
+/*--------------------------------------------------------------------------*/
+
+/****************************************************************************/
+static void send_msg_type_x11_fwd_init(int s)
+{
+  t_msg msg;
+  msg.type = msg_type_x11_fwd_init;
+  msg.len = 0;
   if (mdl_queue_write_msg(s, &msg))
     KERR("%d", msg.len);
 }
@@ -162,7 +176,7 @@ static int connect_isock(char *ipascii, int ip, int port)
 /*---------------------------------------------------------------------------*/
 
 /****************************************************************************/
-static int connect_usock(char *name)
+int connect_usock(char *name)
 {
   int s, result = -1;
   struct sockaddr_un sockun;
@@ -224,7 +238,7 @@ static void rx_err_cb (void *ptr, char *err)
 static int rx_msg_cb(void *ptr, int sock_fd, t_msg *msg)
 {
   (void) ptr;
-int used;
+  int len;
   switch(msg->type)
     {
     case msg_type_data_cli:
@@ -233,6 +247,18 @@ int used;
       break;
     case msg_type_end_cli:
       exit(msg->buf[0]);
+      break;
+    case msg_type_x11_fwd_init:
+      if (g_x11_fwd >= 0)
+        g_x11_fd = g_x11_fwd;
+      break;
+    case msg_type_x11_fwd_data:
+      if (x11_recv_data(g_x11_fd, msg->buf, msg->len))
+        {
+        close(g_x11_fd);
+        g_x11_fd = -1;
+        g_x11_fwd = -1;
+        }
       break;
     default:
       KOUT("%d", msg->type);
@@ -268,6 +294,8 @@ static void select_loop_pty(int sock_fd, int win_chg_read_fd, int max)
   int n;
   FD_ZERO(&readfds);
   FD_ZERO(&writefds);
+  if (g_x11_fd >= 0)
+    FD_SET(g_x11_fd, &readfds);
   FD_SET(win_chg_read_fd, &readfds);
   if (!mdl_queue_write_saturated(1))
     FD_SET(sock_fd, &readfds);
@@ -299,6 +327,17 @@ static void select_loop_pty(int sock_fd, int win_chg_read_fd, int max)
       action_input_rx(sock_fd);
     if (FD_ISSET(sock_fd, &readfds))
       mdl_read(NULL, sock_fd, rx_msg_cb, rx_err_cb);
+    if (g_x11_fd >= 0)
+      {
+      if (FD_ISSET(g_x11_fd, &readfds))
+        {
+        if (x11_action(g_x11_fd, sock_fd))
+          {
+          close(g_x11_fd);
+          g_x11_fd = -1;
+          }
+        }
+      }
     }
 }
 /*--------------------------------------------------------------------------*/
@@ -326,6 +365,13 @@ static void loop_cli(int sock_fd, char *cmd, char *src, char *dst)
       config_sigs();
       send_msg_type_open_pty(sock_fd, cmd);
       send_msg_type_win_size(sock_fd);
+      g_x11_fwd = x11_fwd_init();
+      if (g_x11_fwd >= 0)
+        {
+        send_msg_type_x11_fwd_init(sock_fd);
+        if (g_x11_fwd > max)
+          max = g_x11_fwd;
+        }
       for(;;)
         select_loop_pty(sock_fd, pipe_fd[0], max);
       }
@@ -436,6 +482,7 @@ int main(int argc, char **argv)
   char *cmd, *src, *dst;
   g_is_snd = 0;
   g_is_rcv = 0;
+  g_x11_fd = -1;
   if (argc < 3)
     usage(argv[0]);
   if (!strcmp(argv[1], "-u"))

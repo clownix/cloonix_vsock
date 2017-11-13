@@ -78,7 +78,7 @@ static void scp_cli_snd(int *fd, char *src, char *complete_dst, char *resp)
 {
   if (!scp_rx_open_snd(src, complete_dst, resp))
     {
-    *fd = open(complete_dst, O_CREAT|O_EXCL|O_WRONLY, 0655);
+    *fd = open(complete_dst, O_CREAT|O_EXCL|O_WRONLY, 0644);
     if (*fd == -1)
       {
       resp[0] = 'K';
