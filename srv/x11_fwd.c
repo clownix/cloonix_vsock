@@ -207,8 +207,15 @@ static int x11_action_fd(int disp_idx, int conn_idx, int x11_fd, int sock_fd)
   int result = -1;
   t_msg msg;
   int len = read(x11_fd, msg.buf, MAX_MSG_LEN);
-  if (len <= 0)
+  if (len == 0)
     KERR("%d", errno);
+  else if (len < 0)
+    {
+    if ((errno != EAGAIN) && (errno != EINTR))
+      KERR("%d", errno);
+    else
+      result = 0;
+    }
   else
     {
     msg.type = ((disp_idx<<24)&0xFF000000) |
@@ -294,16 +301,19 @@ void x11_fdset(fd_set *readfds)
         {
         disp = &(g_display[i]); 
         FD_SET(disp->x11_listen_fd, readfds);
-        for (j=1; j<MAX_IDX_X11; j++)
+        if (!mdl_queue_write_saturated(disp->sock_fd))
           {
-          if (disp->conn[j])
+          for (j=1; j<MAX_IDX_X11; j++)
             {
-            if (disp->conn[j]->x11_fd < 0)
-              KERR(" ");
-            else
+            if (disp->conn[j])
               {
-              if (disp->conn[j]->is_valid)
-                FD_SET(disp->conn[j]->x11_fd, readfds);
+              if (disp->conn[j]->x11_fd < 0)
+                KERR(" ");
+              else
+                {
+                if (disp->conn[j]->is_valid)
+                  FD_SET(disp->conn[j]->x11_fd, readfds);
+                }
               }
             }
           }

@@ -288,7 +288,8 @@ static void select_loop_pty(int sock_fd, int win_chg_read_fd, int tmax)
   int n, max = tmax;
   FD_ZERO(&readfds);
   FD_ZERO(&writefds);
-  if (g_x11_ok)
+  if ((g_x11_ok) &&
+      (!mdl_queue_write_saturated(sock_fd)))
     x11_fdset(&readfds, &max);
   FD_SET(win_chg_read_fd, &readfds);
   if (!mdl_queue_write_saturated(1))
