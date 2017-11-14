@@ -41,8 +41,7 @@
 static struct termios g_orig_term;
 static struct termios g_cur_term;
 static int g_win_chg_write_fd;
-static int g_x11_fwd;
-static int g_x11_fd;
+static int g_x11_ok;
 static char g_sock_path[MAX_PATH_LEN];
 static int g_is_snd;
 static int g_is_rcv;
@@ -100,17 +99,6 @@ static void send_msg_type_win_size(int s)
   msg.type = msg_type_win_size;
   msg.len = sizeof(struct winsize);
   ioctl(0, TIOCGWINSZ, msg.buf);
-  if (mdl_queue_write_msg(s, &msg))
-    KERR("%d", msg.len);
-}
-/*--------------------------------------------------------------------------*/
-
-/****************************************************************************/
-static void send_msg_type_x11_fwd_init(int s)
-{
-  t_msg msg;
-  msg.type = msg_type_x11_fwd_init;
-  msg.len = 0;
   if (mdl_queue_write_msg(s, &msg))
     KERR("%d", msg.len);
 }
@@ -238,8 +226,10 @@ static void rx_err_cb (void *ptr, char *err)
 static int rx_msg_cb(void *ptr, int sock_fd, t_msg *msg)
 {
   (void) ptr;
-  int len;
-  switch(msg->type)
+  int len, type, conn_idx;
+  type = msg->type & 0xFFFF;
+  conn_idx = (msg->type >> 16) & 0xFFFF;
+  switch(type)
     {
     case msg_type_data_cli:
       if (mdl_queue_write_raw(1, msg->buf, msg->len))
@@ -249,17 +239,16 @@ static int rx_msg_cb(void *ptr, int sock_fd, t_msg *msg)
       exit(msg->buf[0]);
       break;
     case msg_type_x11_fwd_init:
-      if (g_x11_fwd >= 0)
-        g_x11_fd = g_x11_fwd;
+      if (!strcmp(msg->buf, "OK"))
+        g_x11_ok = 1;
+      else
+        KERR("%s", msg->buf); 
       break;
     case msg_type_x11_fwd_data:
-      if (x11_recv_data(g_x11_fd, msg->buf, msg->len))
-        {
-        close(g_x11_fd);
-        g_x11_fd = -1;
-        g_x11_fwd = -1;
-        }
+      x11_recv_data(msg);
       break;
+    case msg_type_x11_fwd_connect:
+int x11_fwd_connect(int comm_idx, int *x11_fd)
     default:
       KOUT("%d", msg->type);
     }
@@ -283,19 +272,18 @@ static void action_input_rx(int sock_fd)
       KERR("%d", msg.len);
     }
 }
-
 /*--------------------------------------------------------------------------*/
 
 /****************************************************************************/
-static void select_loop_pty(int sock_fd, int win_chg_read_fd, int max)
+static void select_loop_pty(int sock_fd, int win_chg_read_fd, int tmax)
 {
   fd_set readfds;
   fd_set writefds;
-  int n;
+  int n, max = tmax;
   FD_ZERO(&readfds);
   FD_ZERO(&writefds);
-  if (g_x11_fd >= 0)
-    FD_SET(g_x11_fd, &readfds);
+  if (g_x11_ok)
+    x11_fdset(&readfds, &max);
   FD_SET(win_chg_read_fd, &readfds);
   if (!mdl_queue_write_saturated(1))
     FD_SET(sock_fd, &readfds);
@@ -327,17 +315,8 @@ static void select_loop_pty(int sock_fd, int win_chg_read_fd, int max)
       action_input_rx(sock_fd);
     if (FD_ISSET(sock_fd, &readfds))
       mdl_read(NULL, sock_fd, rx_msg_cb, rx_err_cb);
-    if (g_x11_fd >= 0)
-      {
-      if (FD_ISSET(g_x11_fd, &readfds))
-        {
-        if (x11_action(g_x11_fd, sock_fd))
-          {
-          close(g_x11_fd);
-          g_x11_fd = -1;
-          }
-        }
-      }
+    if (g_x11_ok)
+      x11_fd_isset(&readfds);
     }
 }
 /*--------------------------------------------------------------------------*/
@@ -365,13 +344,7 @@ static void loop_cli(int sock_fd, char *cmd, char *src, char *dst)
       config_sigs();
       send_msg_type_open_pty(sock_fd, cmd);
       send_msg_type_win_size(sock_fd);
-      g_x11_fwd = x11_fwd_init();
-      if (g_x11_fwd >= 0)
-        {
-        send_msg_type_x11_fwd_init(sock_fd);
-        if (g_x11_fwd > max)
-          max = g_x11_fwd;
-        }
+      x11_fwd_init(sock_fd);
       for(;;)
         select_loop_pty(sock_fd, pipe_fd[0], max);
       }
@@ -482,7 +455,7 @@ int main(int argc, char **argv)
   char *cmd, *src, *dst;
   g_is_snd = 0;
   g_is_rcv = 0;
-  g_x11_fd = -1;
+  g_x11_ok = 0;
   if (argc < 3)
     usage(argv[0]);
   if (!strcmp(argv[1], "-u"))

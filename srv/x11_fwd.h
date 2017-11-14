@@ -18,10 +18,13 @@
 #define UNIX_X11_SOCKET_PREFIX "/tmp/.X11-unix/X42"
 #define UNIX_X11_DISPLAY "DISPLAY=unix:42.0"
 int open_listen_usock(char *name);
-int x11_listen(int *x11_fwd_fd);
-void x11_listen_action(int x11_fwd_listen_fd, int *x11_fwd_fd);
+int x11_get_max_fd(int max);
+void x11_fdset(fd_set *readfds);
+void x11_fd_isset(fd_set *readfds);
 int x11_recv_data(int x11_fd, char *buf, int len);
-int x11_action(int x11_fwd_fd, int sock_fd);
+void x11_fwd_connect_ack(int conn_idx, char *txt);
+void x11_fwd_init_msg(int sock_fd);
+void x11_init_pool(void);
 /*--------------------------------------------------------------------------*/
 
 

@@ -57,6 +57,8 @@ enum
   msg_type_scp_data_end_ack,
   msg_type_x11_fwd_init,
   msg_type_x11_fwd_data,
+  msg_type_x11_fwd_connect,
+  msg_type_x11_fwd_connect_ack,
 };
 typedef struct t_msg
 {

@@ -52,8 +52,6 @@ typedef struct t_cli
   int sock_fd;
   int pty_master_fd;
   int cli_type;
-  int x11_fwd_listen_fd;
-  int x11_fwd_fd;
   int scp_fd;
   int scp_begin;
   char scp_path[MAX_PATH_LEN];
@@ -74,8 +72,6 @@ static void cli_alloc(int fd)
   g_nb_cli += 1;
   cli->sock_fd = fd; 
   cli->pty_master_fd = -1;
-  cli->x11_fwd_listen_fd = -1;
-  cli->x11_fwd_fd = -1;
   cli->scp_fd = -1;
   cli->scp_begin = 0;
   if (g_cli_head)
@@ -287,22 +283,14 @@ static void send_msg_type_end(int s, char status)
 /*--------------------------------------------------------------------------*/
 
 /****************************************************************************/
-static void send_msg_type_x11_fwd_init(int s, char *txt)
-{
-  t_msg msg;
-  msg.type = msg_type_x11_fwd_init;
-  msg.len = sprintf(msg.buf, "%s", txt) + 1;
-  if (mdl_queue_write_msg(s, &msg))
-    KERR("%d", msg.len);
-}
-/*--------------------------------------------------------------------------*/
-
-/****************************************************************************/
 static int rx_msg_cb(void *ptr, int sock_fd, t_msg *msg)
 {
   int result = 0;
   t_cli *cli = (t_cli *) ptr;
-  switch(msg->type)
+  int type, conn_idx;
+  type = msg->type & 0xFFFF;
+  conn_idx = (msg->type >> 16) & 0xFFFF;
+  switch(type)
     {
 
     case msg_type_data_pty :
@@ -353,18 +341,15 @@ static int rx_msg_cb(void *ptr, int sock_fd, t_msg *msg)
       break;
 
     case msg_type_x11_fwd_init:
-      if (!x11_listen(&(cli->x11_fwd_listen_fd)))
-        send_msg_type_x11_fwd_init(sock_fd, "OK");
-      else
-        send_msg_type_x11_fwd_init(sock_fd, "KO");
+      x11_fwd_init_msg(sock_fd);
       break;
 
     case msg_type_x11_fwd_data:
-      if (x11_recv_data(cli->x11_fwd_fd, msg->buf, msg->len))
-        {
-        close(cli->x11_fwd_fd);
-        cli->x11_fwd_fd = -1;
-        }
+      x11_recv_data(comm_idx, msg->buf, msg->len);
+      break;
+
+    case msg_type_x11_fwd_connect_ack:
+      x11_fwd_connect_ack(conn_idx, msg->buf);
       break;
 
     default :
@@ -430,10 +415,7 @@ static int get_max(int listen_sock_fd, int sig_read_fd)
       result = cur->sock_fd;
     if (cur->pty_master_fd > result)
       result = cur->pty_master_fd;
-    if (cur->x11_fwd_listen_fd > result)
-      result = cur->x11_fwd_listen_fd;
-    if (cur->x11_fwd_fd > result)
-      result = cur->x11_fwd_fd;
+    result = x11_get_max_fd(result);
     cur = cur->next;
     }
   return result;
@@ -449,12 +431,9 @@ static void prepare_fd_set(int listen_sock_fd, int sig_read_fd,
   FD_ZERO(writefds);
   FD_SET(listen_sock_fd, readfds);
   FD_SET(sig_read_fd, readfds);
+  x11_fdset(readfds);
   while(cur)
     {
-    if (cur->x11_fwd_listen_fd != -1)
-      FD_SET(cur->x11_fwd_listen_fd, readfds);
-    if (cur->x11_fwd_fd != -1)
-      FD_SET(cur->x11_fwd_fd, readfds);
     if (cur->pty_master_fd != -1)
       {
       if (!mdl_queue_write_saturated(cur->pty_master_fd))
@@ -514,6 +493,7 @@ static void server_loop(int listen_sock_fd, int sig_read_fd)
       listen_socket_action(listen_sock_fd);
     if (FD_ISSET(sig_read_fd, &readfds))
       sig_evt_action(sig_read_fd);
+    x11_fd_isset(&readfds, cur->sock_fd);
     cur = g_cli_head;
     while(cur)
       {
@@ -532,16 +512,6 @@ static void server_loop(int listen_sock_fd, int sig_read_fd)
         }
       if (FD_ISSET(cur->sock_fd, &readfds))
         mdl_read((void *)cur, cur->sock_fd, rx_msg_cb, rx_err_cb);
-      if (FD_ISSET(cur->x11_fwd_listen_fd, &readfds))
-        x11_listen_action(cur->x11_fwd_listen_fd, &(cur->x11_fwd_fd));
-      if (FD_ISSET(cur->x11_fwd_fd, &readfds))
-        {
-        if (x11_action(cur->x11_fwd_fd, cur->sock_fd))
-          {
-          close(cur->x11_fwd_fd);
-          cur->x11_fwd_fd = -1;
-          }
-        }
       cur = next;
       }
     }
@@ -605,6 +575,7 @@ int main(int argc, char **argv)
   char unix_sock_path[MAX_PATH_LEN];
   int listen_sock_fd, port;
   g_nb_cli = 0;
+  x11_init_pool();
   if (argc == 2)
     {
     port = mdl_parse_val(argv[1]);

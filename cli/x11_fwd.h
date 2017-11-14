@@ -17,9 +17,12 @@
 /*****************************************************************************/
 #define UNIX_X11_SOCKET_PREFIX "/tmp/.X11-unix/X%d"
 int connect_usock(char *name);
-int x11_fwd_init(void);
+void x11_fwd_init(int sock_fd);
 int x11_recv_data(int x11_fd, char *buf, int len);
 int x11_action(int x11_fd, int sock_fd);
+void x11_fwd_connect(int comm_idx);
+void x11_fdset(fd_set *readfds);
+void x11_fd_isset(fd_set *readfds);
 /*--------------------------------------------------------------------------*/
 
 
