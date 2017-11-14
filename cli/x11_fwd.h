@@ -15,13 +15,12 @@
 /*  along with this program.  If not, see <http://www.gnu.org/licenses/>.    */
 /*                                                                           */
 /*****************************************************************************/
-#define UNIX_X11_SOCKET_PREFIX "/tmp/.X11-unix/X%d"
 int connect_usock(char *name);
-void x11_fwd_init(int sock_fd);
-int x11_recv_data(int x11_fd, char *buf, int len);
-int x11_action(int x11_fd, int sock_fd);
-void x11_fwd_connect(int comm_idx);
-void x11_fdset(fd_set *readfds);
+void x11_init(int sock_fd);
+void x11_data_rx(int disp_idx, int conn_idx, char *buf, int len);
+void x11_connect(int disp_idx, int conn_idx, int sock_fd);
+void x11_disconnect(int disp_idx, int conn_idx);
+void x11_fdset(fd_set *readfds, int *max);
 void x11_fd_isset(fd_set *readfds);
 /*--------------------------------------------------------------------------*/
 

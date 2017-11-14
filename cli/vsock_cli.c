@@ -226,9 +226,11 @@ static void rx_err_cb (void *ptr, char *err)
 static int rx_msg_cb(void *ptr, int sock_fd, t_msg *msg)
 {
   (void) ptr;
-  int len, type, conn_idx;
+  int len, type, disp_idx, conn_idx;
   type = msg->type & 0xFFFF;
-  conn_idx = (msg->type >> 16) & 0xFFFF;
+  disp_idx = (msg->type >> 24) & 0x00FF;
+  conn_idx = (msg->type >> 16) & 0x00FF;
+
   switch(type)
     {
     case msg_type_data_cli:
@@ -238,19 +240,23 @@ static int rx_msg_cb(void *ptr, int sock_fd, t_msg *msg)
     case msg_type_end_cli:
       exit(msg->buf[0]);
       break;
-    case msg_type_x11_fwd_init:
+    case msg_type_x11_init:
       if (!strcmp(msg->buf, "OK"))
         g_x11_ok = 1;
       else
         KERR("%s", msg->buf); 
       break;
-    case msg_type_x11_fwd_data:
-      x11_recv_data(msg);
+    case msg_type_x11_data:
+      x11_data_rx(disp_idx, conn_idx, msg->buf, msg->len);
       break;
-    case msg_type_x11_fwd_connect:
-int x11_fwd_connect(int comm_idx, int *x11_fd)
+    case msg_type_x11_connect:
+      x11_connect(disp_idx, conn_idx, sock_fd);
+      break;
+    case msg_type_x11_disconnect:
+      x11_disconnect(disp_idx, conn_idx);
+      break;
     default:
-      KOUT("%d", msg->type);
+      KOUT("%d", msg->type & 0xFFFF);
     }
   return 0;
 }
@@ -344,7 +350,7 @@ static void loop_cli(int sock_fd, char *cmd, char *src, char *dst)
       config_sigs();
       send_msg_type_open_pty(sock_fd, cmd);
       send_msg_type_win_size(sock_fd);
-      x11_fwd_init(sock_fd);
+      x11_init(sock_fd);
       for(;;)
         select_loop_pty(sock_fd, pipe_fd[0], max);
       }

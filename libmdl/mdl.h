@@ -39,6 +39,12 @@
     exit(-1);                                                  \
     } while (0)
 
+#define MAX_DISPLAY_X11 10 
+#define MAX_IDX_X11 7
+#define X11_ID_OFFSET 242
+#define UNIX_X11_SOCKET_PREFIX "/tmp/.X11-unix/X%d"
+#define UNIX_X11_DISPLAY "DISPLAY=unix:%d.0"
+
 enum
 {
   msg_type_data_pty = 7,
@@ -55,10 +61,11 @@ enum
   msg_type_scp_data_end,
   msg_type_scp_data_begin,
   msg_type_scp_data_end_ack,
-  msg_type_x11_fwd_init,
-  msg_type_x11_fwd_data,
-  msg_type_x11_fwd_connect,
-  msg_type_x11_fwd_connect_ack,
+  msg_type_x11_init,
+  msg_type_x11_data,
+  msg_type_x11_connect,
+  msg_type_x11_connect_ack,
+  msg_type_x11_disconnect,
 };
 typedef struct t_msg
 {

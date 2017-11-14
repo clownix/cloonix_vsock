@@ -85,6 +85,8 @@ static void cli_alloc(int fd)
 static void cli_free(t_cli *cli)
 {
   g_nb_cli -= 1;
+  if (cli->cli_type == cli_type_bash)
+    x11_free_display(cli->sock_fd);
   if (cli->prev)
     cli->prev->next = cli->next;
   if (cli->next)
@@ -115,10 +117,17 @@ static void nonblocking(int fd)
 /*--------------------------------------------------------------------------*/
 
 /****************************************************************************/
-static void bin_bash_pty(t_cli *cli, char *cmd)
+static void bin_bash_pty(t_cli *cli, char *cmd, int display_val)
 {
   char *argv[5];
-  char *env[] = {"PATH=/usr/sbin:/usr/bin:/sbin:/bin",UNIX_X11_DISPLAY,NULL};
+  char display[MAX_PATH_LEN];
+  char *env_no_x11[] = {"PATH=/usr/sbin:/usr/bin:/sbin:/bin", NULL};
+  char *env[] = {"PATH=/usr/sbin:/usr/bin:/sbin:/bin", display, NULL};
+  if (display_val)
+    {
+    memset(display, 0, MAX_PATH_LEN);
+    snprintf(display, MAX_PATH_LEN-1, UNIX_X11_DISPLAY, display_val);
+    }
   cli->pid = forkpty(&(cli->pty_master_fd), NULL, NULL, NULL);
   if (cli->pid == 0)
     {
@@ -134,7 +143,10 @@ static void bin_bash_pty(t_cli *cli, char *cmd)
       argv[0] = "/bin/bash";
       argv[1] = NULL;
       } 
-    execve("/bin/bash", argv, env);
+    if (display_val)
+      execve("/bin/bash", argv, env);
+    else
+      execve("/bin/bash", argv, env_no_x11);
     }
   else if (cli->pid < 0)
     KOUT("%s", strerror(errno));
@@ -287,9 +299,11 @@ static int rx_msg_cb(void *ptr, int sock_fd, t_msg *msg)
 {
   int result = 0;
   t_cli *cli = (t_cli *) ptr;
-  int type, conn_idx;
+  int type, disp_idx, conn_idx, display_val;
   type = msg->type & 0xFFFF;
-  conn_idx = (msg->type >> 16) & 0xFFFF;
+  disp_idx = (msg->type >> 24) & 0x00FF;
+  conn_idx = (msg->type >> 16) & 0x00FF;
+
   switch(type)
     {
 
@@ -302,12 +316,13 @@ static int rx_msg_cb(void *ptr, int sock_fd, t_msg *msg)
 
     case msg_type_open_bash :
       cli->cli_type = cli_type_bash;
-      bin_bash_pty(cli, NULL);
+      display_val = x11_alloc_display(sock_fd);
+      bin_bash_pty(cli, NULL, display_val);
     break;
 
     case msg_type_open_cmd :
       cli->cli_type = cli_type_cmd;
-      bin_bash_pty(cli, msg->buf);
+      bin_bash_pty(cli, msg->buf, 0);
     break;
 
     case msg_type_win_size :
@@ -340,16 +355,16 @@ static int rx_msg_cb(void *ptr, int sock_fd, t_msg *msg)
       send_msg_type_end(sock_fd, 0);
       break;
 
-    case msg_type_x11_fwd_init:
-      x11_fwd_init_msg(sock_fd);
+    case msg_type_x11_init:
+      x11_init_cli_msg(sock_fd);
       break;
 
-    case msg_type_x11_fwd_data:
-      x11_recv_data(comm_idx, msg->buf, msg->len);
+    case msg_type_x11_data:
+      x11_data_rx(disp_idx, conn_idx, msg->buf, msg->len);
       break;
 
-    case msg_type_x11_fwd_connect_ack:
-      x11_fwd_connect_ack(conn_idx, msg->buf);
+    case msg_type_x11_connect_ack:
+      x11_connect_ack(disp_idx, conn_idx, msg->buf);
       break;
 
     default :
@@ -493,7 +508,7 @@ static void server_loop(int listen_sock_fd, int sig_read_fd)
       listen_socket_action(listen_sock_fd);
     if (FD_ISSET(sig_read_fd, &readfds))
       sig_evt_action(sig_read_fd);
-    x11_fd_isset(&readfds, cur->sock_fd);
+    x11_fd_isset(&readfds);
     cur = g_cli_head;
     while(cur)
       {
@@ -575,7 +590,7 @@ int main(int argc, char **argv)
   char unix_sock_path[MAX_PATH_LEN];
   int listen_sock_fd, port;
   g_nb_cli = 0;
-  x11_init_pool();
+  x11_init_display();
   if (argc == 2)
     {
     port = mdl_parse_val(argv[1]);
