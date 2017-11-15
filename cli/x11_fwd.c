@@ -129,9 +129,12 @@ void x11_fdset(fd_set *readfds, int *max)
 /****************************************************************************/
 static void local_disconnect(int conn_idx)
 {
-  close(g_conn[conn_idx]->x11_fd);
-  free(g_conn[conn_idx]);
-  g_conn[conn_idx] = NULL;
+  if (g_conn[conn_idx])
+    {
+    close(g_conn[conn_idx]->x11_fd);
+    free(g_conn[conn_idx]);
+    g_conn[conn_idx] = NULL;
+    }
 }
 /*--------------------------------------------------------------------------*/
 
@@ -205,7 +208,8 @@ void x11_init(int sock_fd)
   char *display = getenv("DISPLAY");
   memset(g_x11_path, 0, MAX_PATH_LEN);
   memset(g_conn, 0, MAX_IDX_X11 * sizeof(t_conn_cli_x11 *));
-  if (sscanf(display, ":%d", &val) == 1)
+  if ((sscanf(display, ":%d", &val) == 1) ||
+      (sscanf(display, "unix:%d.0", &val) == 1))
     {
     snprintf(g_x11_path, MAX_PATH_LEN-1, UNIX_X11_SOCKET_PREFIX, val);
     if (access(g_x11_path, F_OK))

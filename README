@@ -1,16 +1,18 @@
 
 Software to help using VirtioVsock
 
-Provides a distant bash between virtual guest and host going through
-the virtio-vsock host/guest communications device.
+Provides a distant bash between virtual guest and host going
+through the virtio-vsock host/guest communications device.
 
 Also does distant non-interractive commands.
-Also provides regular file copy.
+Also provides regular file copy to or from distant server.
+Also forwards the x11 graphical applications.
 
 
 To use, first create the server and client binaries:
 
 ./doitall
+
 
 
 On the host:
