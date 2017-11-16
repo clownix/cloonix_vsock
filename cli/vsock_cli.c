@@ -52,7 +52,7 @@ static int g_is_rcv;
 static void restore_term(void)
 {
   tcsetattr(0, TCSADRAIN, &g_orig_term);
-  printf("\033[?25h");
+  printf("\033[?25h\r\n");
   fflush(stdout);
 }
 /*--------------------------------------------------------------------------*/

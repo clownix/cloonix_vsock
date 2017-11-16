@@ -6,11 +6,6 @@ if [ ! -e ${HERE}/vsock_cli ] || [ ! -e ${HERE}/vsock_srv ]; then
   exit 1
 fi
 
-n=$(grep -c vhost_vsock /etc/modules-load.d/modules.conf)
-if (( $n == 0 )); then
-  echo "vhost_vsock" >> /etc/modules-load.d/modules.conf
-fi
-
 cp -rf ${HERE}/vsock_cli /usr/bin
 cp -rf ${HERE}/vsock_srv /usr/bin
 
@@ -22,7 +17,6 @@ After=systemd-modules-load.service
 [Service]
 Type=forking
 ExecStart=/usr/bin/vsock_srv 7777
-StandardOutput=null
 Restart=always
 
 [Install]

@@ -13,44 +13,47 @@ To use, first create the server and client binaries:
 
 ./doitall
 
+Then the server command line is:
+./vsock_srv <vsock_port>
+
+And the client command line is:
+./vsock_cli <vsock_cid> <vsock_port>
+
+The vsock_cid is 2 (harcoded) for the host and you can use from 3 upwards
+for the guests.
 
 
-On the host:
+On the host, module vhost_vsock is necessary, it creates
+/dev/vhost-vsock, this file is opened rw by qemu and as I launch
+qemu without privileges, I chmod 0666 this file before launching
+qemu. The virtual guest launched with qemu must have the following
+line in its start command (case where guest cid is chosen to be 4):
 
-sudo rmmod vmw_vsock_vmci_transport
-sudo rmmod vmw_vsock_virtio_transport_common
-sudo rmmod vsock
+  -device vhost-vsock-pci,id=vhost-vsock-pci0,guest-cid=4
+
 sudo modprobe vhost_vsock
 sudo chmod 0666 /dev/vhost-vsock
-
 sudo ./vsock_srv 777
+qemu... -device vhost-vsock-pci,...guest-cid=4 ...
 
-Launch your virtual guest, the qemu must have the following device:
--device vhost-vsock-pci,id=vhost-vsock-pci0,guest-cid=4
 
-for me, I use cloonix 38.1 or after, as follows:
 
-cloonix_net nemo
-cloonix_gui nemo
-cloonix_cli nemo add kvm Cloon1 2000 2 2 stretch.qcow2 --vhost-vsock
-
-if you have an error do:
-sudo cat /var/log/user.log | grep qemu
+Errors I have had during tries:
 
   "failed to open vhost device: Unknown error -2"
-  happens when /dev/vhost_vsock does not exist
+  happens when /dev/vhost_vsock does not exist (module not inserted)
 
   "failed to open vhost device: Unknown error -13"
   happens when the qemu software cannot read/write /dev/vhost_vsock
 
-cloonix_scp nemo vsock_cli Cloon1:
-cloonix_ssh nemo Cloon1
 
-In the Cloon1 virtual machine:
+
+Once inside the guest virtual machine:
 
 ./vsock_cli 2 777
 
-And you get a pseudo-console as root on the host.
+
+And you get a pseudo-console as root on the host machine.
 
 
 In case of unexpected events with this software, do:
@@ -60,25 +63,16 @@ For bug reports use github or mail clownix at clownix.net.
 
 
 #--------------------------------------------------------------------
-This tool can be tested with unix or ip sockets also, here are the
-possible commands for the server:
+This tool can be tested with unix or ip sockets before using it
+on the real host/guest env.
 
-./vsock_srv <vsock_port>
-
-	 or for tests:
+Here are the possible commands for the server for unix or ip:
 
 ./vsock_srv -i <inet_port>
 ./vsock_srv -u <unix_sock_path>
 
 #--------------------------------------------------------------------
-Here are the possible commands for the client:
-
-./vsock_cli <vsock_cid> <vsock_port>
-./vsock_cli <vsock_cid> <vsock_port> -cmd "<cmd + params>"
-./vsock_cli <vsock_cid> <vsock_port> -snd <loc_src> <rem_dst_dir>
-./vsock_cli <vsock_cid> <vsock_port> -rcv <rem_src> <loc_dst_dir>
-
-	 or for tests:
+Here are the possible commands for the client for unix or ip:
 
 ./vsock_cli -i <ip> <port>
 ./vsock_cli -i <ip> <port> -cmd "<cmd + params>"
@@ -91,7 +85,7 @@ Here are the possible commands for the client:
 ./vsock_cli -u <unix_sock> -rcv <rem_src> <loc_dst_dir>
 
 #--------------------------------------------------------------------
-Example:
+Basic Examples:
 
 ./vsock_srv 7777
 ./vsock_cli 2 7777
@@ -104,4 +98,8 @@ Example:
 
 #--------------------------------------------------------------------
 
+If you want an automated systemd start of vsock_srv, you can use the
+bash file install_vsock.sh to help.
+
+#--------------------------------------------------------------------
 
