@@ -62,7 +62,28 @@ typedef struct t_cli
 static t_cli *g_cli_head;
 static int g_nb_cli;
 static int g_sig_write_fd;
+static char g_home[MAX_PATH_LEN];
+static char g_path[MAX_PATH_LEN];
+static char g_term[MAX_PATH_LEN];
+static char g_shell[MAX_PATH_LEN];
 
+/****************************************************************************/
+static void init_all_env(void)
+{
+  char *home = getenv("HOME");
+  memset(g_home, 0, MAX_PATH_LEN);
+  memset(g_path, 0, MAX_PATH_LEN);
+  memset(g_term, 0, MAX_PATH_LEN);
+  memset(g_shell, 0, MAX_PATH_LEN);
+  if (!home)
+    snprintf(g_home, MAX_PATH_LEN, "HOME=%s", "/root");
+  else
+    snprintf(g_home, MAX_PATH_LEN, "HOME=%s", home);
+  snprintf(g_path,  MAX_PATH_LEN, "PATH=/usr/sbin:/usr/bin:/sbin:/bin");
+  snprintf(g_term,  MAX_PATH_LEN, "TERM=xterm");
+  snprintf(g_shell, MAX_PATH_LEN, "SHELL=/bin/bash");
+}
+/*--------------------------------------------------------------------------*/
 
 /****************************************************************************/
 static void cli_alloc(int fd)
@@ -121,8 +142,8 @@ static void bin_bash_pty(t_cli *cli, char *cmd, int display_val)
 {
   char *argv[5];
   char display[MAX_PATH_LEN];
-  char *env_no_x11[] = {"PATH=/usr/sbin:/usr/bin:/sbin:/bin", NULL};
-  char *env[] = {"PATH=/usr/sbin:/usr/bin:/sbin:/bin", display, NULL};
+  char *env_no_x11[] = {g_path, g_home, g_term, g_shell, NULL};
+  char *env[] =        {g_path, g_home, g_term, g_shell, display, NULL};
   if (display_val)
     {
     memset(display, 0, MAX_PATH_LEN);
@@ -590,6 +611,7 @@ int main(int argc, char **argv)
   char unix_sock_path[MAX_PATH_LEN];
   int listen_sock_fd, port;
   g_nb_cli = 0;
+  init_all_env();
   x11_init_display();
   if (argc == 2)
     {
