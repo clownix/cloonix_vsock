@@ -167,7 +167,8 @@ static int get_xauth_magic(char *display)
           }
         }
       }
-    pclose(fp);
+    if (pclose(fp))
+      KERR("%s", cmd);
     }
   return result;
 }

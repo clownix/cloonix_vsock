@@ -270,9 +270,10 @@ static int xauth_add_magic_cookie(int display_val, char *cookie)
     {
     if (fgets(buf, MAX_PATH_LEN-1, fp))
       KERR("%s %s", cmd, buf);
+    else if (pclose(fp))
+      KERR("%s", cmd);
     else
       result = 0;
-    pclose(fp);
     }
   return result;
 }
@@ -301,7 +302,10 @@ void x11_connect_ack(int disp_idx, int conn_idx, char *txt)
           if (!xauth_add_magic_cookie(X11_ID_OFFSET+disp_idx, cookie))
             disp->conn[conn_idx]->is_valid = 1;
           else
+            {
+            disp->next_conn_idx = 0;
             disconnect_conn_idx(disp, conn_idx);
+            }
           }
         else
           {
@@ -403,9 +407,7 @@ void x11_fd_isset(fd_set *readfds)
           {
           if (disp->conn[j])
             {
-            if (disp->conn[j]->x11_fd < 0)
-              KERR(" ");
-            else
+            if (disp->conn[j]->x11_fd >= 0)
               {
               if (FD_ISSET(disp->conn[j]->x11_fd, readfds))
                 {
