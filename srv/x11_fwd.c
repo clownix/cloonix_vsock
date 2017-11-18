@@ -40,6 +40,7 @@ typedef struct t_display_x11
   int sock_fd;
   int display;
   int x11_listen_fd;
+  int next_conn_idx;
   int pool_fifo[MAX_IDX_X11-1];
   int pool_read;
   int pool_write;
@@ -123,6 +124,8 @@ static int alloc_pool_idx(t_display_x11 *disp)
     disp->conn[idx] = (t_conn_x11 *) malloc(sizeof(t_conn_x11));
     memset(disp->conn[idx], 0, sizeof(t_conn_x11));
     }
+  else
+    KERR(" ");
   return idx;
 }
 /*---------------------------------------------------------------------------*/
@@ -130,12 +133,15 @@ static int alloc_pool_idx(t_display_x11 *disp)
 /*****************************************************************************/
 static void free_pool_idx(t_display_x11 *disp, int idx)
 {
-  disp->pool_fifo[disp->pool_write] =  idx;
-  disp->pool_write = (disp->pool_write + 1) % (MAX_IDX_X11 - 1);
   if (!disp->conn[idx])
-    KOUT(" ");
-  free(disp->conn[idx]);
-  disp->conn[idx] = NULL;
+    KERR("%d", idx);
+  else
+    {
+    disp->pool_fifo[disp->pool_write] =  idx;
+    disp->pool_write = (disp->pool_write + 1) % (MAX_IDX_X11 - 1);
+    free(disp->conn[idx]);
+    disp->conn[idx] = NULL;
+    }
 }
 /*---------------------------------------------------------------------------*/
 
@@ -179,26 +185,34 @@ static void disconnect_conn_idx(t_display_x11 *disp, int conn_idx)
 /*--------------------------------------------------------------------------*/
 
 /****************************************************************************/
-static void x11_listen_action(t_display_x11 *disp, int disp_idx)
+static int prepare_next_conn_idx(t_display_x11 *disp)
+{
+  int conn_idx = alloc_pool_idx(disp);
+  if (conn_idx > 0)
+    {
+    disp->conn[conn_idx]->x11_fd = -1;
+    disp->conn[conn_idx]->is_valid = 0;
+    send_msg_type_x11_connect(disp->sock_fd, disp->disp_idx, conn_idx);
+    }
+  return conn_idx;
+}
+/*--------------------------------------------------------------------------*/
+
+/****************************************************************************/
+static void x11_listen_action(t_display_x11 *disp)
 {
   int fd, conn_idx;
   fd = accept(disp->x11_listen_fd, NULL, NULL);
   if (fd < 0)
     KERR("%s", strerror(errno));
+  else if (!disp->next_conn_idx)
+    KERR("No conn ready");
   else
     {
-    conn_idx = alloc_pool_idx(disp);
-    if (conn_idx == 0)
-      {
-      close(fd);
-      KERR(" ");
-      }
-    else
-      {
-      disp->conn[conn_idx]->x11_fd = fd;
-      disp->conn[conn_idx]->is_valid = 0;
-      send_msg_type_x11_connect(disp->sock_fd, disp_idx, conn_idx);
-      }
+    if ((disp->next_conn_idx < 0) || (disp->next_conn_idx >= MAX_IDX_X11))
+      KOUT("%d", disp->next_conn_idx);
+    disp->conn[disp->next_conn_idx]->x11_fd = fd;
+    disp->next_conn_idx = prepare_next_conn_idx(disp);
     }
 }
 /*--------------------------------------------------------------------------*/
@@ -356,12 +370,9 @@ void x11_fdset(fd_set *readfds)
             {
             if (disp->conn[j])
               {
-              if (disp->conn[j]->x11_fd < 0)
-                KERR(" ");
-              else
+              if ((disp->conn[j]->x11_fd >= 0) && (disp->conn[j]->is_valid))
                 {
-                if (disp->conn[j]->is_valid)
-                  FD_SET(disp->conn[j]->x11_fd, readfds);
+                FD_SET(disp->conn[j]->x11_fd, readfds);
                 }
               }
             }
@@ -387,7 +398,7 @@ void x11_fd_isset(fd_set *readfds)
         {
         disp = &(g_display[i]);
         if (FD_ISSET(disp->x11_listen_fd, readfds))
-          x11_listen_action(disp, i);
+          x11_listen_action(disp);
         for (j=1; j<MAX_IDX_X11; j++)
           {
           if (disp->conn[j])
@@ -432,6 +443,11 @@ void x11_data_rx(int disp_idx, int conn_idx, char *buf, int len)
         KERR("%d %d", disp_idx, conn_idx);
         disconnect_conn_idx(disp, conn_idx);
         }
+      else if (disp->conn[conn_idx]->x11_fd < 0) 
+        {
+        KERR("%d %d", disp_idx, conn_idx);
+        disconnect_conn_idx(disp, conn_idx);
+        }
       else
         {
         wlen = write(disp->conn[conn_idx]->x11_fd, buf, len);
@@ -453,9 +469,9 @@ void x11_data_rx(int disp_idx, int conn_idx, char *buf, int len)
 /****************************************************************************/
 void x11_init_cli_msg(int sock_fd)
 {
-  int fd;
+  t_display_x11 *disp = find_disp(sock_fd);
   char *display_path = x11_display_path(X11_ID_OFFSET);
-  fd = open_listen_usock(display_path);
+  int fd = open_listen_usock(display_path);
   if (fd < 0)
     {
     KERR("%s", strerror(errno));
@@ -466,6 +482,7 @@ void x11_init_cli_msg(int sock_fd)
     close(fd);
     unlink(display_path);
     send_msg_type_x11_init(sock_fd, "OK");
+    disp->next_conn_idx = prepare_next_conn_idx(disp);
     }
 }
 /*--------------------------------------------------------------------------*/
