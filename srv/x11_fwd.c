@@ -231,10 +231,41 @@ static int x11_action_fd(int disp_idx, int conn_idx, int x11_fd, int sock_fd)
 }
 /*--------------------------------------------------------------------------*/
 
+
+/****************************************************************************/
+static int xauth_add_magic_cookie(int display_val, char *cookie)
+{
+  int result = -1;
+  char dpyname[MAX_PATH_LEN];
+  char cmd[2*MAX_PATH_LEN];
+  char buf[MAX_PATH_LEN];
+  FILE *fp;
+  memset(cmd, 0, 2*MAX_PATH_LEN);
+  memset(buf, 0, MAX_PATH_LEN);
+  memset(dpyname, 0, MAX_PATH_LEN);
+  snprintf(dpyname, MAX_PATH_LEN-1, UNIX_X11_DPYNAME, display_val);
+  snprintf(cmd, 2*MAX_PATH_LEN-1,
+           "xauth add %s MIT-MAGIC-COOKIE-1 %s", dpyname, cookie);
+  fp = popen(cmd, "r");
+  if (fp == NULL)
+    KERR("%s", cmd);
+  else
+    {
+    if (fgets(buf, MAX_PATH_LEN-1, fp))
+      KERR("%s %s", cmd, buf);
+    else
+      result = 0;
+    pclose(fp);
+    }
+  return result;
+}
+/*--------------------------------------------------------------------------*/
+
 /****************************************************************************/
 void x11_connect_ack(int disp_idx, int conn_idx, char *txt)
 {
   t_display_x11 *disp;
+  char cookie[MAX_PATH_LEN];
   if ((disp_idx > 0) && (disp_idx < MAX_DISPLAY_X11))
     {
     if ((conn_idx > 0) && (conn_idx < MAX_IDX_X11))
@@ -244,8 +275,23 @@ void x11_connect_ack(int disp_idx, int conn_idx, char *txt)
         KERR("%d %d", disp_idx, conn_idx);
       else if (!(disp->conn[conn_idx]))
         KERR("%d %d", disp_idx, conn_idx);
-      else if (!strcmp(txt, "OK"))
-        disp->conn[conn_idx]->is_valid = 1;
+      else if (!strncmp(txt, "OK", 2))
+        {
+        if (strlen(txt) == 2)
+          disp->conn[conn_idx]->is_valid = 1;
+        else if (sscanf(txt, "OK %s", cookie)) 
+          {
+          if (!xauth_add_magic_cookie(X11_ID_OFFSET+disp_idx, cookie))
+            disp->conn[conn_idx]->is_valid = 1;
+          else
+            disconnect_conn_idx(disp, conn_idx);
+          }
+        else
+          {
+          KERR("%s", txt);
+          disconnect_conn_idx(disp, conn_idx);
+          }
+        }
       else
         {
         KERR("%s", txt);

@@ -27,6 +27,8 @@
 #include "x11_fwd.h"
 
 static char g_x11_path[MAX_PATH_LEN];
+static int g_x11_port;
+static char g_x11_magic[MAX_PATH_LEN];
 
 typedef struct t_conn_cli_x11
 {
@@ -37,6 +39,7 @@ typedef struct t_conn_cli_x11
 
 static t_conn_cli_x11 *g_conn[MAX_IDX_X11];
 
+int connect_isock(char *ip, int port);
 
 /****************************************************************************/
 static void send_msg_type_x11_init(int s)
@@ -110,6 +113,78 @@ static int x11_action_fd(int disp_idx, int conn_idx, int x11_fd, int sock_fd)
 }
 /*--------------------------------------------------------------------------*/
 
+
+/****************************************************************************/
+static int get_xauth_magic(char *display)
+{
+  int result = -1;
+  char cmd[MAX_PATH_LEN];
+  char buf[MAX_PATH_LEN];
+  char *ptr, *end;
+  FILE *fp;
+  memset(cmd, 0, MAX_PATH_LEN);
+  memset(buf, 0, MAX_PATH_LEN);
+  snprintf(cmd, MAX_PATH_LEN-1, "xauth list %s", display);
+  fp = popen(cmd, "r");
+  if (fp == NULL)
+    KERR("%s", cmd);
+  else
+    {
+    if (!fgets(buf, MAX_PATH_LEN-1, fp))
+      KERR("%s", cmd);
+    else
+      {
+      if (!strlen(buf)) 
+        KERR("%s", cmd);
+      else
+        {
+        ptr = strstr(buf, "MIT-MAGIC-COOKIE-1");
+        if (!ptr)
+          KERR("%s  %s", buf);
+        else
+          {
+          ptr += strlen("MIT-MAGIC-COOKIE-1");
+          ptr += strspn(ptr, " \t");
+          if (!strlen(ptr) > 1)
+            KERR("%s  %s", buf);
+          else
+            {
+            end = strchr(ptr, '\r');
+            if (end) 
+              *end = 0;
+            end = strchr(ptr, '\n');
+            if (end) 
+              *end = 0;
+            if (!strlen(ptr) > 1)
+              KERR("%s  %s", buf);
+            else
+              {
+              memset(g_x11_magic, 0, MAX_PATH_LEN);
+              strncpy(g_x11_magic, ptr, MAX_PATH_LEN-1);
+              result = 0;
+              }
+            }
+          }
+        }
+      }
+    pclose(fp);
+    }
+  return result;
+}
+/*--------------------------------------------------------------------------*/
+
+/****************************************************************************/
+static void local_disconnect(int conn_idx)
+{
+  if (g_conn[conn_idx])
+    {
+    close(g_conn[conn_idx]->x11_fd);
+    free(g_conn[conn_idx]);
+    g_conn[conn_idx] = NULL;
+    }
+}
+/*--------------------------------------------------------------------------*/
+
 /****************************************************************************/
 void x11_fdset(fd_set *readfds, int *max)
 {
@@ -122,18 +197,6 @@ void x11_fdset(fd_set *readfds, int *max)
         *max = g_conn[i]->x11_fd;
       FD_SET(g_conn[i]->x11_fd, readfds);
       }
-    }
-}
-/*--------------------------------------------------------------------------*/
-
-/****************************************************************************/
-static void local_disconnect(int conn_idx)
-{
-  if (g_conn[conn_idx])
-    {
-    close(g_conn[conn_idx]->x11_fd);
-    free(g_conn[conn_idx]);
-    g_conn[conn_idx] = NULL;
     }
 }
 /*--------------------------------------------------------------------------*/
@@ -178,25 +241,55 @@ void x11_disconnect(int disp_idx, int conn_idx)
 void x11_connect(int disp_idx, int conn_idx, int sock_fd)
 {
   int fd = -1;
+  char msg[MAX_PATH_LEN];
   if ((disp_idx <= 0) || (disp_idx >= MAX_DISPLAY_X11))
     KOUT("%d %d %d", disp_idx, conn_idx, sock_fd);
   if ((conn_idx <= 0) || (conn_idx >= MAX_IDX_X11))
     KOUT("%d %d %d", disp_idx, conn_idx, sock_fd);
   if (strlen(g_x11_path))
+    { 
     fd = connect_usock(g_x11_path);
-  if (fd < 0)
+    if (fd < 0)
+      {
+      KERR("%s", strerror(errno));
+      send_msg_type_x11_connect_ack(sock_fd, disp_idx, conn_idx, "KO");
+      memset(g_x11_path, 0, MAX_PATH_LEN);
+      }
+    else
+      {
+      g_conn[conn_idx] = (t_conn_cli_x11 *) malloc(sizeof(t_conn_cli_x11));
+      memset(g_conn[conn_idx], 0, sizeof(t_conn_cli_x11));
+      g_conn[conn_idx]->disp_idx = disp_idx;
+      g_conn[conn_idx]->x11_fd   = fd;
+      g_conn[conn_idx]->sock_fd  = sock_fd;
+      send_msg_type_x11_connect_ack(sock_fd, disp_idx, conn_idx, "OK");
+      }
+    }
+  else if (g_x11_port)
     {
-    KERR("%s", strerror(errno));
-    send_msg_type_x11_connect_ack(sock_fd, disp_idx, conn_idx, "KO");
+    fd = connect_isock("127.0.0.1", g_x11_port);
+    if (fd >= 0)
+      {
+      g_conn[conn_idx] = (t_conn_cli_x11 *) malloc(sizeof(t_conn_cli_x11));
+      memset(g_conn[conn_idx], 0, sizeof(t_conn_cli_x11));
+      g_conn[conn_idx]->disp_idx = disp_idx;
+      g_conn[conn_idx]->x11_fd   = fd;
+      g_conn[conn_idx]->sock_fd  = sock_fd;
+      memset(msg, 0, MAX_PATH_LEN);
+      snprintf(msg, MAX_PATH_LEN-1, "OK %s", g_x11_magic); 
+      send_msg_type_x11_connect_ack(sock_fd, disp_idx, conn_idx, msg);
+      }
+    else
+      {
+      KERR("Cannot open X11 ssh pathway port: %d", g_x11_port);
+      send_msg_type_x11_connect_ack(sock_fd, disp_idx, conn_idx, "KO");
+      g_x11_port = 0;
+      }
     }
   else
     {
-    g_conn[conn_idx] = (t_conn_cli_x11 *) malloc(sizeof(t_conn_cli_x11));
-    memset(g_conn[conn_idx], 0, sizeof(t_conn_cli_x11));
-    g_conn[conn_idx]->disp_idx = disp_idx;
-    g_conn[conn_idx]->x11_fd   = fd;
-    g_conn[conn_idx]->sock_fd  = sock_fd;
-    send_msg_type_x11_connect_ack(sock_fd, disp_idx, conn_idx, "OK");
+    KERR("No display unix path");
+    send_msg_type_x11_connect_ack(sock_fd, disp_idx, conn_idx, "KO");
     }
 }
 /*--------------------------------------------------------------------------*/
@@ -204,26 +297,53 @@ void x11_connect(int disp_idx, int conn_idx, int sock_fd)
 /****************************************************************************/
 void x11_init(int sock_fd)
 {
-  int val, result = -1;
+  int fd, val, result = -1;
   char *display = getenv("DISPLAY");
+  g_x11_port = 0;
   memset(g_x11_path, 0, MAX_PATH_LEN);
   memset(g_conn, 0, MAX_IDX_X11 * sizeof(t_conn_cli_x11 *));
-  if ((sscanf(display, ":%d", &val) == 1) ||
-      (sscanf(display, "unix:%d.0", &val) == 1))
+  if (!display)
+    KERR("X11 no DISPLAY");
+  else
     {
-    snprintf(g_x11_path, MAX_PATH_LEN-1, UNIX_X11_SOCKET_PREFIX, val);
-    if (access(g_x11_path, F_OK))
+    if ((sscanf(display, ":%d", &val) == 1) ||
+        (sscanf(display, "unix:%d.0", &val) == 1))
       {
-      KERR("X11 socket not found: %s", g_x11_path);
-      memset(g_x11_path, 0, MAX_PATH_LEN);
+      snprintf(g_x11_path, MAX_PATH_LEN-1, UNIX_X11_SOCKET_PREFIX, val);
+      if (access(g_x11_path, F_OK))
+        {
+        KERR("X11 socket not found: %s", g_x11_path);
+        memset(g_x11_path, 0, MAX_PATH_LEN);
+        }
+      else
+        {
+        send_msg_type_x11_init(sock_fd);
+        }
       }
-    else
+    else if (sscanf(display, "localhost:%d.0", &val) == 1)
       {
-      send_msg_type_x11_init(sock_fd);
+      g_x11_port = 6000+val;
+      fd = connect_isock("127.0.0.1", g_x11_port);
+      if (fd >= 0)
+        {
+        close(fd);
+        if (get_xauth_magic(display))
+          {
+          KERR("Cannot get X11 ssh magic cookie for %s", display);
+          g_x11_port = 0;
+          }
+        else
+          {
+          send_msg_type_x11_init(sock_fd);
+          }
+        }
+      else
+        {
+        KERR("Cannot open X11 ssh pathway localhost:%d.0", val);
+        g_x11_port = 0;
+        }
       }
     }
-  else
-    KERR("X11 display not good: %s", display);
 }
 /*--------------------------------------------------------------------------*/
 

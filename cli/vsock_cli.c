@@ -141,24 +141,22 @@ static void config_term(void)
 /*--------------------------------------------------------------------------*/
 
 /*****************************************************************************/
-static int connect_isock(char *ipascii, int ip, int port)
+int connect_isock(char *ip, int port_num)
 {
-  int s, result = -1;
+  int s, ip_num, result = -1;
   struct sockaddr_in sockin;
   memset(&sockin, 0, sizeof(sockin));
+  if (ip_string_to_int(&ip_num, ip))
+    KOUT("Bad ip: %s", ip);
   s = socket (AF_INET,SOCK_STREAM,0);
   if (s >= 0)
     {
     sockin.sin_family = AF_INET;
-    sockin.sin_port = htons(port);
-    sockin.sin_addr.s_addr = htonl(ip);
+    sockin.sin_port = htons(port_num);
+    sockin.sin_addr.s_addr = htonl(ip_num);
     if (connect(s, (struct sockaddr*)&sockin, sizeof(sockin)) == 0)
       result = s;
-    else
-      KOUT("Connect error ip: %s  port: %d\n", ipascii, port);
     }
-  else
-    KOUT("socket AF_INET SOCK_STREAM create error");
   return result;
 }
 /*---------------------------------------------------------------------------*/
@@ -414,11 +412,11 @@ static void main_vsock(char *cid, char *port,
 static void main_isock(char *ip, char *port,
                        char *cmd, char *src, char *dst)
 {
-  int sock_fd, ip_num, port_num;
-  if (ip_string_to_int(&ip_num, ip))
-    KOUT("Bad ip: %s", ip);
-  port_num = mdl_parse_val(port);
-  sock_fd = connect_isock(ip, ip_num, port_num);
+  int sock_fd;
+  int port_num = mdl_parse_val(port);
+  sock_fd = connect_isock(ip, port_num);
+  if (sock_fd < 0)
+    KOUT(" %s %s %s\n", ip, port, strerror(errno));
   if (cmd && (strlen(cmd) >= MAX_MSG_LEN))
     KOUT("%d %s", strlen(cmd), cmd);
   loop_cli(sock_fd, cmd, src, dst);

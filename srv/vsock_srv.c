@@ -66,6 +66,7 @@ static char g_home[MAX_PATH_LEN];
 static char g_path[MAX_PATH_LEN];
 static char g_term[MAX_PATH_LEN];
 static char g_shell[MAX_PATH_LEN];
+static char g_xauthority[MAX_PATH_LEN];
 
 /****************************************************************************/
 static void init_all_env(void)
@@ -75,10 +76,18 @@ static void init_all_env(void)
   memset(g_path, 0, MAX_PATH_LEN);
   memset(g_term, 0, MAX_PATH_LEN);
   memset(g_shell, 0, MAX_PATH_LEN);
+  memset(g_xauthority, 0, MAX_PATH_LEN);
   if (!home)
+    {
     snprintf(g_home, MAX_PATH_LEN, "HOME=%s", "/root");
+    snprintf(g_xauthority, MAX_PATH_LEN, "XAUTHORITY=%s/.Xauthority", "/root");
+    KERR("homeless");
+    }
   else
+    {
     snprintf(g_home, MAX_PATH_LEN, "HOME=%s", home);
+    snprintf(g_xauthority, MAX_PATH_LEN, "XAUTHORITY=%s/.Xauthority", home);
+    }
   snprintf(g_path,  MAX_PATH_LEN, "PATH=/usr/sbin:/usr/bin:/sbin:/bin");
   snprintf(g_term,  MAX_PATH_LEN, "TERM=xterm");
   snprintf(g_shell, MAX_PATH_LEN, "SHELL=/bin/bash");
@@ -142,8 +151,9 @@ static void bin_bash_pty(t_cli *cli, char *cmd, int display_val)
 {
   char *argv[5];
   char display[MAX_PATH_LEN];
-  char *env_no_x11[] = {g_path, g_home, g_term, g_shell, NULL};
-  char *env[] =        {g_path, g_home, g_term, g_shell, display, NULL};
+  char *env_no_x11[] = {g_path, g_home, g_term, g_shell, g_xauthority, NULL};
+  char *env[] =        {g_path, g_home, g_term, g_shell, g_xauthority,
+                        display, NULL};
   if (display_val)
     {
     memset(display, 0, MAX_PATH_LEN);

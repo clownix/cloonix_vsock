@@ -44,6 +44,7 @@
 #define X11_ID_OFFSET 242
 #define UNIX_X11_SOCKET_PREFIX "/tmp/.X11-unix/X%d"
 #define UNIX_X11_DISPLAY "DISPLAY=unix:%d.0"
+#define UNIX_X11_DPYNAME "unix:%d.0"
 
 enum
 {
