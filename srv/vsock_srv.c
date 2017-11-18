@@ -67,6 +67,7 @@ static char g_path[MAX_PATH_LEN];
 static char g_term[MAX_PATH_LEN];
 static char g_shell[MAX_PATH_LEN];
 static char g_xauthority[MAX_PATH_LEN];
+static char g_xauthority_file[MAX_PATH_LEN];
 
 /****************************************************************************/
 static void init_all_env(void)
@@ -77,20 +78,30 @@ static void init_all_env(void)
   memset(g_term, 0, MAX_PATH_LEN);
   memset(g_shell, 0, MAX_PATH_LEN);
   memset(g_xauthority, 0, MAX_PATH_LEN);
+  memset(g_xauthority_file, 0, MAX_PATH_LEN);
   if (!home)
     {
-    snprintf(g_home, MAX_PATH_LEN, "HOME=%s", "/root");
-    snprintf(g_xauthority, MAX_PATH_LEN, "XAUTHORITY=%s/.Xauthority", "/root");
+    snprintf(g_home, MAX_PATH_LEN-1, "HOME=%s", "/root");
+    snprintf(g_xauthority_file, MAX_PATH_LEN-1, "/root/.CloonixXauthority"); 
+    snprintf(g_xauthority, MAX_PATH_LEN-1, "XAUTHORITY=%s", g_xauthority_file); 
     KERR("homeless");
     }
   else
     {
-    snprintf(g_home, MAX_PATH_LEN, "HOME=%s", home);
-    snprintf(g_xauthority, MAX_PATH_LEN, "XAUTHORITY=%s/.Xauthority", home);
+    snprintf(g_home, MAX_PATH_LEN-1, "HOME=%s", home);
+    snprintf(g_xauthority_file, MAX_PATH_LEN-1, "%s/.CloonixXauthority", home); 
+    snprintf(g_xauthority, MAX_PATH_LEN-1, "XAUTHORITY=%s", g_xauthority_file); 
     }
-  snprintf(g_path,  MAX_PATH_LEN, "PATH=/usr/sbin:/usr/bin:/sbin:/bin");
-  snprintf(g_term,  MAX_PATH_LEN, "TERM=xterm");
-  snprintf(g_shell, MAX_PATH_LEN, "SHELL=/bin/bash");
+  snprintf(g_path,  MAX_PATH_LEN-1, "PATH=/usr/sbin:/usr/bin:/sbin:/bin");
+  snprintf(g_term,  MAX_PATH_LEN-1, "TERM=xterm");
+  snprintf(g_shell, MAX_PATH_LEN-1, "SHELL=/bin/bash");
+}
+/*--------------------------------------------------------------------------*/
+
+/****************************************************************************/
+char *get_xauthority_file(void)
+{
+  return (g_xauthority_file);
 }
 /*--------------------------------------------------------------------------*/
 

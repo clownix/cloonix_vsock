@@ -297,7 +297,7 @@ void x11_connect(int disp_idx, int conn_idx, int sock_fd)
 /****************************************************************************/
 void x11_init(int sock_fd)
 {
-  int fd, val, result = -1;
+  int val, result = -1;
   char *display = getenv("DISPLAY");
   g_x11_port = 0;
   memset(g_x11_path, 0, MAX_PATH_LEN);
@@ -323,24 +323,14 @@ void x11_init(int sock_fd)
     else if (sscanf(display, "localhost:%d.0", &val) == 1)
       {
       g_x11_port = 6000+val;
-      fd = connect_isock("127.0.0.1", g_x11_port);
-      if (fd >= 0)
+      if (get_xauth_magic(display))
         {
-        close(fd);
-        if (get_xauth_magic(display))
-          {
-          KERR("Cannot get X11 ssh magic cookie for %s", display);
-          g_x11_port = 0;
-          }
-        else
-          {
-          send_msg_type_x11_init(sock_fd);
-          }
+        KERR("Cannot get X11 ssh magic cookie for %s", display);
+        g_x11_port = 0;
         }
       else
         {
-        KERR("Cannot open X11 ssh pathway localhost:%d.0", val);
-        g_x11_port = 0;
+        send_msg_type_x11_init(sock_fd);
         }
       }
     }

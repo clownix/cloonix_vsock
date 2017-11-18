@@ -47,6 +47,8 @@ typedef struct t_display_x11
 } t_display_x11;
 
 
+char *get_xauthority_file(void);
+
 static t_display_x11 g_display[MAX_DISPLAY_X11];
 
 
@@ -239,13 +241,14 @@ static int xauth_add_magic_cookie(int display_val, char *cookie)
   char dpyname[MAX_PATH_LEN];
   char cmd[2*MAX_PATH_LEN];
   char buf[MAX_PATH_LEN];
+  char *xaf = get_xauthority_file();
   FILE *fp;
   memset(cmd, 0, 2*MAX_PATH_LEN);
   memset(buf, 0, MAX_PATH_LEN);
   memset(dpyname, 0, MAX_PATH_LEN);
   snprintf(dpyname, MAX_PATH_LEN-1, UNIX_X11_DPYNAME, display_val);
   snprintf(cmd, 2*MAX_PATH_LEN-1,
-           "xauth add %s MIT-MAGIC-COOKIE-1 %s", dpyname, cookie);
+           "xauth -f %s add %s MIT-MAGIC-COOKIE-1 %s", xaf, dpyname, cookie);
   fp = popen(cmd, "r");
   if (fp == NULL)
     KERR("%s", cmd);
