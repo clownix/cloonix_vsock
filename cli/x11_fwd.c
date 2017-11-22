@@ -115,38 +115,39 @@ static int x11_action_fd(int disp_idx, int conn_idx, int x11_fd, int sock_fd)
 
 
 /****************************************************************************/
-static int get_xauth_magic(char *display)
+static int get_xauth_magic(char *display, char *err)
 {
   int result = -1;
   char cmd[MAX_PATH_LEN];
   char buf[MAX_PATH_LEN];
   char *ptr, *end;
   FILE *fp;
+  memset(err, 0, MAX_PATH_LEN);
   memset(cmd, 0, MAX_PATH_LEN);
   memset(buf, 0, MAX_PATH_LEN);
   snprintf(cmd, MAX_PATH_LEN-1, "xauth list %s", display);
   fp = popen(cmd, "r");
   if (fp == NULL)
-    KERR("%s", cmd);
+    snprintf(err, MAX_PATH_LEN-1, "%s, popen", cmd);
   else
     {
     if (!fgets(buf, MAX_PATH_LEN-1, fp))
-      KERR("%s", cmd);
+      snprintf(err, MAX_PATH_LEN-1, "%s, fgets", cmd);
     else
       {
       if (!strlen(buf)) 
-        KERR("%s", cmd);
+        snprintf(err, MAX_PATH_LEN-1, "%s, strlen", cmd);
       else
         {
         ptr = strstr(buf, "MIT-MAGIC-COOKIE-1");
         if (!ptr)
-          KERR("%s  %s", buf);
+          snprintf(err, MAX_PATH_LEN-1, "%s, MIT-MAGIC", buf);
         else
           {
           ptr += strlen("MIT-MAGIC-COOKIE-1");
           ptr += strspn(ptr, " \t");
           if (!strlen(ptr) > 1)
-            KERR("%s  %s", buf);
+            snprintf(err, MAX_PATH_LEN-1, "%s, MIT-MAGIC strlen1", buf);
           else
             {
             end = strchr(ptr, '\r');
@@ -156,7 +157,7 @@ static int get_xauth_magic(char *display)
             if (end) 
               *end = 0;
             if (!strlen(ptr) > 1)
-              KERR("%s  %s", buf);
+              snprintf(err, MAX_PATH_LEN-1, "%s, MIT-MAGIC strlen2", buf);
             else
               {
               memset(g_x11_magic, 0, MAX_PATH_LEN);
@@ -168,7 +169,7 @@ static int get_xauth_magic(char *display)
         }
       }
     if (pclose(fp))
-      KERR("%s", cmd);
+      snprintf(err, MAX_PATH_LEN-1, "%s, pclose", cmd);
     }
   return result;
 }
@@ -239,10 +240,24 @@ void x11_disconnect(int disp_idx, int conn_idx)
 /*--------------------------------------------------------------------------*/
 
 /****************************************************************************/
+static void create_conn_and_ack(int fd, int sock_fd,int disp_idx,int conn_idx)
+{
+  char msg[MAX_PATH_LEN];
+  g_conn[conn_idx] = (t_conn_cli_x11 *) malloc(sizeof(t_conn_cli_x11));
+  memset(g_conn[conn_idx], 0, sizeof(t_conn_cli_x11));
+  g_conn[conn_idx]->disp_idx = disp_idx;
+  g_conn[conn_idx]->x11_fd   = fd;
+  g_conn[conn_idx]->sock_fd  = sock_fd;
+  memset(msg, 0, MAX_PATH_LEN);
+  snprintf(msg, MAX_PATH_LEN-1, "OK %s", g_x11_magic);
+  send_msg_type_x11_connect_ack(sock_fd, disp_idx, conn_idx, msg);
+}
+/*--------------------------------------------------------------------------*/
+
+/****************************************************************************/
 void x11_connect(int disp_idx, int conn_idx, int sock_fd)
 {
   int fd = -1;
-  char msg[MAX_PATH_LEN];
   if ((disp_idx <= 0) || (disp_idx >= MAX_DISPLAY_X11))
     KOUT("%d %d %d", disp_idx, conn_idx, sock_fd);
   if ((conn_idx <= 0) || (conn_idx >= MAX_IDX_X11))
@@ -258,12 +273,7 @@ void x11_connect(int disp_idx, int conn_idx, int sock_fd)
       }
     else
       {
-      g_conn[conn_idx] = (t_conn_cli_x11 *) malloc(sizeof(t_conn_cli_x11));
-      memset(g_conn[conn_idx], 0, sizeof(t_conn_cli_x11));
-      g_conn[conn_idx]->disp_idx = disp_idx;
-      g_conn[conn_idx]->x11_fd   = fd;
-      g_conn[conn_idx]->sock_fd  = sock_fd;
-      send_msg_type_x11_connect_ack(sock_fd, disp_idx, conn_idx, "OK");
+      create_conn_and_ack(fd, sock_fd, disp_idx, conn_idx);
       }
     }
   else if (g_x11_port)
@@ -271,14 +281,7 @@ void x11_connect(int disp_idx, int conn_idx, int sock_fd)
     fd = connect_isock("127.0.0.1", g_x11_port);
     if (fd >= 0)
       {
-      g_conn[conn_idx] = (t_conn_cli_x11 *) malloc(sizeof(t_conn_cli_x11));
-      memset(g_conn[conn_idx], 0, sizeof(t_conn_cli_x11));
-      g_conn[conn_idx]->disp_idx = disp_idx;
-      g_conn[conn_idx]->x11_fd   = fd;
-      g_conn[conn_idx]->sock_fd  = sock_fd;
-      memset(msg, 0, MAX_PATH_LEN);
-      snprintf(msg, MAX_PATH_LEN-1, "OK %s", g_x11_magic); 
-      send_msg_type_x11_connect_ack(sock_fd, disp_idx, conn_idx, msg);
+      create_conn_and_ack(fd, sock_fd, disp_idx, conn_idx);
       }
     else
       {
@@ -299,9 +302,11 @@ void x11_connect(int disp_idx, int conn_idx, int sock_fd)
 void x11_init(int sock_fd)
 {
   int fd, val, result = -1;
+  char err[MAX_PATH_LEN];
   char *display = getenv("DISPLAY");
   g_x11_port = 0;
   memset(g_x11_path, 0, MAX_PATH_LEN);
+  memset(g_x11_magic, 0, MAX_PATH_LEN);
   memset(g_conn, 0, MAX_IDX_X11 * sizeof(t_conn_cli_x11 *));
   if (!display)
     KERR("X11 no DISPLAY");
@@ -318,6 +323,8 @@ void x11_init(int sock_fd)
         }
       else
         {
+        if (sscanf(display, "unix:%d.0", &val) == 1)
+          get_xauth_magic(display, err);
         send_msg_type_x11_init(sock_fd);
         }
       }
@@ -333,9 +340,9 @@ void x11_init(int sock_fd)
       else
         {
         close(fd);
-        if (get_xauth_magic(display))
+        if (get_xauth_magic(display, err))
           {
-          KERR("Cannot get X11 ssh magic cookie for %s", display);
+          KERR("Cannot get X11 ssh magic cookie for %s %s", display, err);
           g_x11_port = 0;
           }
         else

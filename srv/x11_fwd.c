@@ -295,9 +295,7 @@ void x11_connect_ack(int disp_idx, int conn_idx, char *txt)
         KERR("%d %d", disp_idx, conn_idx);
       else if (!strncmp(txt, "OK", 2))
         {
-        if (strlen(txt) == 2)
-          disp->conn[conn_idx]->is_valid = 1;
-        else if (sscanf(txt, "OK %s", cookie)) 
+        if (sscanf(txt, "OK %s", cookie) == 1) 
           {
           if (!xauth_add_magic_cookie(X11_ID_OFFSET+disp_idx, cookie))
             disp->conn[conn_idx]->is_valid = 1;
@@ -307,11 +305,8 @@ void x11_connect_ack(int disp_idx, int conn_idx, char *txt)
             disconnect_conn_idx(disp, conn_idx);
             }
           }
-        else
-          {
-          KERR("%s", txt);
-          disconnect_conn_idx(disp, conn_idx);
-          }
+        else 
+          disp->conn[conn_idx]->is_valid = 1;
         }
       else
         {
