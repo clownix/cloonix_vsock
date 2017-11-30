@@ -236,6 +236,7 @@ static int rx_msg_cb(void *ptr, int sock_fd, t_msg *msg)
         KERR("%d", msg->len);
       break;
     case msg_type_end_cli:
+      mdl_write(1);
       exit(msg->buf[0]);
       break;
     case msg_type_x11_init:
@@ -349,7 +350,8 @@ static void loop_cli(int sock_fd, char *cmd, char *src, char *dst)
       config_sigs();
       send_msg_type_open_pty(sock_fd, cmd);
       send_msg_type_win_size(sock_fd);
-      x11_init(sock_fd);
+      if (!cmd)
+        x11_init(sock_fd);
       for(;;)
         select_loop_pty(sock_fd, pipe_fd[0], max);
       }

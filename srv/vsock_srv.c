@@ -398,15 +398,24 @@ static int rx_msg_cb(void *ptr, int sock_fd, t_msg *msg)
       break;
 
     case msg_type_x11_init:
-      x11_init_cli_msg(sock_fd);
+      if (cli->cli_type == cli_type_bash)
+        x11_init_cli_msg(sock_fd);
+      else
+        KERR(" ");
       break;
 
     case msg_type_x11_data:
-      x11_data_rx(disp_idx, conn_idx, msg->buf, msg->len);
+      if (cli->cli_type == cli_type_bash)
+        x11_data_rx(disp_idx, conn_idx, msg->buf, msg->len);
+      else
+        KERR(" ");
       break;
 
     case msg_type_x11_connect_ack:
-      x11_connect_ack(disp_idx, conn_idx, msg->buf);
+      if (cli->cli_type == cli_type_bash)
+        x11_connect_ack(disp_idx, conn_idx, msg->buf);
+      else
+        KERR(" ");
       break;
 
     default :
@@ -472,7 +481,8 @@ static int get_max(int listen_sock_fd, int sig_read_fd)
       result = cur->sock_fd;
     if (cur->pty_master_fd > result)
       result = cur->pty_master_fd;
-    result = x11_get_max_fd(result);
+    if (cur->cli_type == cli_type_bash)
+      result = x11_get_max_fd(result);
     cur = cur->next;
     }
   return result;
@@ -548,8 +558,6 @@ static void server_loop(int listen_sock_fd, int sig_read_fd)
     {
     if (FD_ISSET(listen_sock_fd, &readfds))
       listen_socket_action(listen_sock_fd);
-    if (FD_ISSET(sig_read_fd, &readfds))
-      sig_evt_action(sig_read_fd);
     x11_fd_isset(&readfds);
     cur = g_cli_head;
     while(cur)
@@ -571,6 +579,8 @@ static void server_loop(int listen_sock_fd, int sig_read_fd)
         mdl_read((void *)cur, cur->sock_fd, rx_msg_cb, rx_err_cb);
       cur = next;
       }
+    if (FD_ISSET(sig_read_fd, &readfds))
+      sig_evt_action(sig_read_fd);
     }
 }
 /*--------------------------------------------------------------------------*/
