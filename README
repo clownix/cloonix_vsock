@@ -102,4 +102,20 @@ If you want an automated systemd start of vsock_srv, you can use the
 bash file install_vsock.sh to help.
 
 #--------------------------------------------------------------------
+NOTES ON LIBVIRT WITH VSOCK:
+http://cloonix.fr:/libvirt_vsock/libvirt_vsock.tar.gz
+is a working cloonix demo of vsock inside a nested guest running
+on virsh.
+
+For the special line to add to qemu, here is the way chosen in the demo:
+<domain type='kvm' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>
+  <name>nested</name>
+  <qemu:commandline>
+    <qemu:arg value='-device'/>
+    <qemu:arg value='vhost-vsock-pci,id=vhost-vsock-pci0,guest-cid=3'/>
+  </qemu:commandline>
+
+The /etc/libvirt/qemu.conf must be modified to add "/dev/vhost-vsock"
+to the cgroup_device_acl, because qemu has to open it.
+#--------------------------------------------------------------------
 
