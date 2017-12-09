@@ -84,7 +84,6 @@ static void init_all_env(void)
     snprintf(g_home, MAX_PATH_LEN-1, "HOME=%s", "/root");
     snprintf(g_xauthority_file, MAX_PATH_LEN-1, "/root/.CloonixXauthority"); 
     snprintf(g_xauthority, MAX_PATH_LEN-1, "XAUTHORITY=%s", g_xauthority_file); 
-    KERR("homeless");
     }
   else
     {
@@ -590,8 +589,7 @@ static void vsock_srv(int listen_sock_fd)
 {
   int pipe_fd[2];
   daemon(0,0);
-  if (signal(SIGPIPE, SIG_IGN))
-    KERR("%d", errno);
+  signal(SIGPIPE, SIG_IGN);
   if (signal(SIGHUP, SIG_IGN))
     KERR("%d", errno);
   if (signal(SIGTTIN, SIG_IGN))

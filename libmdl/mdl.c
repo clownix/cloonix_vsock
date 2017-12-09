@@ -23,8 +23,8 @@
 #include "mdl.h"
 
 #define MAX_FD_NUM 100
-#define MAX_QUEUE_MDL_RX 10000
-#define MAX_QUEUE_MDL_TX 100000
+#define MAX_QUEUE_MDL_RX 100000
+#define MAX_QUEUE_MDL_TX 1000000
 
 typedef struct t_mdl
 {
