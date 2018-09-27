@@ -238,7 +238,7 @@ static void do_cb(t_mdl *mdl, void *ptr, int fd,
 void mdl_read(void *ptr, int s, t_rx_msg_cb rx_cb, t_rx_err_cb err_cb)
 {
   char err[MAX_PATH_LEN];
-  int len, wlen, max_to_read;
+  int len, max_to_read;
   t_mdl *mdl = g_mdl[s];
   if (!mdl) 
     err_cb(ptr, "Context mdl not found");

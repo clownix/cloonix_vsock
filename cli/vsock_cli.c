@@ -42,7 +42,6 @@ static struct termios g_orig_term;
 static struct termios g_cur_term;
 static int g_win_chg_write_fd;
 static int g_x11_ok;
-static char g_sock_path[MAX_PATH_LEN];
 static int g_is_snd;
 static int g_is_rcv;
 
@@ -224,7 +223,7 @@ static void rx_err_cb (void *ptr, char *err)
 static int rx_msg_cb(void *ptr, int sock_fd, t_msg *msg)
 {
   (void) ptr;
-  int len, type, disp_idx, conn_idx;
+  int type, disp_idx, conn_idx;
   type = msg->type & 0xFFFF;
   disp_idx = (msg->type >> 24) & 0x00FF;
   conn_idx = (msg->type >> 16) & 0x00FF;
@@ -458,7 +457,6 @@ static int get_params(int ac, char **av, char **cmd, char **src, char **dst)
 /****************************************************************************/
 int main(int argc, char **argv)
 {
-  char unix_sock_path[MAX_PATH_LEN];
   char *cmd, *src, *dst;
   g_is_snd = 0;
   g_is_rcv = 0;

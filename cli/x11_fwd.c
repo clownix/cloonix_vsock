@@ -228,7 +228,6 @@ void x11_fd_isset(fd_set *readfds)
 /****************************************************************************/
 void x11_disconnect(int disp_idx, int conn_idx)
 {
-  int fd = -1;
   if ((disp_idx <= 0) || (disp_idx >= MAX_DISPLAY_X11))
     KOUT("%d %d", disp_idx, conn_idx);
   if ((conn_idx <= 0) || (conn_idx >= MAX_IDX_X11))
@@ -301,7 +300,7 @@ void x11_connect(int disp_idx, int conn_idx, int sock_fd)
 /****************************************************************************/
 void x11_init(int sock_fd)
 {
-  int fd, val, result = -1;
+  int fd, val;
   char err[MAX_PATH_LEN];
   char *display = getenv("DISPLAY");
   g_x11_port = 0;

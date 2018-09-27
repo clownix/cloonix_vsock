@@ -58,7 +58,6 @@ static int scp_rx_open_snd(char *src, char *complete_dst, char *resp)
 static int scp_rx_open_rcv(char *src, char *complete_dst, char *resp)
 {
   struct stat sb;
-  char *bn;
   int result = -1;
   memset(resp, 0, MAX_PATH_LEN);
   if (stat(src, &sb) == -1)

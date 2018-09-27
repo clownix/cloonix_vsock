@@ -609,20 +609,6 @@ static void vsock_srv(int listen_sock_fd)
 /*--------------------------------------------------------------------------*/
 
 /****************************************************************************/
-static int parse_port(const char *port_str)
-{
-  int result = -1;
-  char *end = NULL;
-  long port = strtol(port_str, &end, 10);
-  if (port_str != end && *end == '\0')
-    result = (int) port;
-  else
-    KOUT("%s", port_str);
-  return result;
-}
-/*--------------------------------------------------------------------------*/
-
-/****************************************************************************/
 static void usage(char *name)
 {
   printf("\n%s <vsock_port>\n", name);

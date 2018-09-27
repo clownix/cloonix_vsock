@@ -201,7 +201,7 @@ static int prepare_next_conn_idx(t_display_x11 *disp)
 /****************************************************************************/
 static void x11_listen_action(t_display_x11 *disp)
 {
-  int fd, conn_idx;
+  int fd;
   fd = accept(disp->x11_listen_fd, NULL, NULL);
   if (fd < 0)
     KERR("%s", strerror(errno));
