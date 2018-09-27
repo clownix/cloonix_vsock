@@ -146,7 +146,7 @@ static int get_xauth_magic(char *display, char *err)
           {
           ptr += strlen("MIT-MAGIC-COOKIE-1");
           ptr += strspn(ptr, " \t");
-          if (!strlen(ptr) > 1)
+          if (strlen(ptr) < 1)
             snprintf(err, MAX_PATH_LEN-1, "%s, MIT-MAGIC strlen1", buf);
           else
             {
@@ -156,7 +156,7 @@ static int get_xauth_magic(char *display, char *err)
             end = strchr(ptr, '\n');
             if (end) 
               *end = 0;
-            if (!strlen(ptr) > 1)
+            if (strlen(ptr) < 1)
               snprintf(err, MAX_PATH_LEN-1, "%s, MIT-MAGIC strlen2", buf);
             else
               {
