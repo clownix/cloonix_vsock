@@ -92,6 +92,7 @@ static void scp_cli_snd(int *fd, char *src, char *complete_dst, char *resp)
 static void scp_cli_rcv(int *fd, char *src, char *complete_dst, char *resp)
 { 
   if (!scp_rx_open_rcv(src, complete_dst, resp))
+    {
     *fd = open(src, O_RDONLY);
     if (*fd == -1)
       {
@@ -99,6 +100,7 @@ static void scp_cli_rcv(int *fd, char *src, char *complete_dst, char *resp)
       resp[1] = 'O';
       KERR("%s %d", src, errno);
       }
+    }
 }
 /*--------------------------------------------------------------------------*/
 
@@ -198,6 +200,7 @@ int recv_scp_open(int type, int sock_fd, int *cli_scp_fd, char *buf)
       send_resp_cli(msg_type_scp_ready_to_snd, sock_fd, resp);
       }
     }
+  return result;
 }
 /*--------------------------------------------------------------------------*/
 

@@ -68,7 +68,8 @@ static void win_size_chg(int sig)
 {
   char buf[1];
   buf[0] = 'w';
-  write(g_win_chg_write_fd, buf, 1);
+  if (write(g_win_chg_write_fd, buf, 1) == -1)
+    KERR("Unable to write to g_win_chg_write_fd: %s", strerror(errno));
 }
 /*--------------------------------------------------------------------------*/
 
@@ -204,9 +205,9 @@ static int connect_vsock(int cid, int port)
 /****************************************************************************/
 static void action_win_chg(int sock_fd, int win_chg_read_fd)
 {
-  int len;
   char buf[16];
-  len = read(win_chg_read_fd, buf, sizeof(buf));
+  if (read(win_chg_read_fd, buf, sizeof(buf)) == -1)
+    KERR("Could not read from win_chg_read_fd: %s", strerror(errno));
   send_msg_type_win_size(sock_fd);
 }
 /*--------------------------------------------------------------------------*/

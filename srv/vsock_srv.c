@@ -530,7 +530,7 @@ static void prepare_fd_set(int listen_sock_fd, int sig_read_fd,
 static void server_loop(int listen_sock_fd, int sig_read_fd)
 {
   int max_fd;
-  t_cli *next, *cur;
+  t_cli *next = NULL, *cur;
   fd_set readfds, writefds;
   cur = g_cli_head;
   while(cur)
@@ -588,7 +588,8 @@ static void server_loop(int listen_sock_fd, int sig_read_fd)
 static void vsock_srv(int listen_sock_fd)
 {
   int pipe_fd[2];
-  daemon(0,0);
+  if (daemon(0, 0) == -1)
+    KOUT("daemon(): %s", strerror(errno));
   signal(SIGPIPE, SIG_IGN);
   if (signal(SIGHUP, SIG_IGN))
     KERR("%d", errno);
