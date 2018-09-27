@@ -110,7 +110,7 @@ static void send_resp_cli(int type, int sock_fd, char *resp)
   msg.type = type;
   msg.len = sprintf(msg.buf, "%s", resp) + 1;
   if (mdl_queue_write_msg(sock_fd, &msg))
-    KERR("%d", msg.len);
+    KERR("%ld", msg.len);
 }
 /*--------------------------------------------------------------------------*/
 
@@ -122,7 +122,7 @@ static void send_scp_data_end(int sock_fd)
   msg.type = msg_type_scp_data_end;
   msg.len = 0;
   if (mdl_queue_write_msg(sock_fd, &msg))
-    KERR("%d", msg.len);
+    KERR("%ld", msg.len);
 }
 /*--------------------------------------------------------------------------*/
 
@@ -139,7 +139,7 @@ static int send_scp_data(int scp_fd, int sock_fd)
   msg.type = msg_type_scp_data;
   msg.len = len;
   if (mdl_queue_write_msg(sock_fd, &msg))
-    KERR("%d", msg.len);
+    KERR("%ld", msg.len);
   return result;
 }
 /*--------------------------------------------------------------------------*/
@@ -155,7 +155,7 @@ void recv_scp_data_end(int scp_fd, int sock_fd)
   msg.type = msg_type_scp_data_end_ack;
   msg.len = 0;
   if (mdl_queue_write_msg(sock_fd, &msg))
-    KERR("%d", msg.len);
+    KERR("%ld", msg.len);
 }
 /*--------------------------------------------------------------------------*/
 
@@ -169,7 +169,7 @@ void recv_scp_data(int scp_fd, t_msg *msg)
     {
     len = write(scp_fd, msg->buf, msg->len);
     if ((len < 0) || (len != msg->len))
-      KERR("%d %d %d", len, msg->len, errno);
+      KERR("%d %ld %d", len, msg->len, errno);
     }
 }
 /*--------------------------------------------------------------------------*/

@@ -331,7 +331,7 @@ static void send_msg_type_end(int s, char status)
   msg.len = 1;
   msg.buf[0] = status;
   if (mdl_queue_write_msg(s, &msg))
-    KERR("%d", msg.len);
+    KERR("%ld", msg.len);
 }
 /*--------------------------------------------------------------------------*/
 
@@ -352,7 +352,7 @@ static int rx_msg_cb(void *ptr, int sock_fd, t_msg *msg)
       if (cli->pty_master_fd == -1)
         KOUT(" ");
       else if (mdl_queue_write_raw(cli->pty_master_fd, msg->buf, msg->len))
-        KERR("%d", msg->len);
+        KERR("%ld", msg->len);
     break;
 
     case msg_type_open_bash :
@@ -418,7 +418,7 @@ static int rx_msg_cb(void *ptr, int sock_fd, t_msg *msg)
       break;
 
     default :
-      KOUT("%d", msg->type);
+      KOUT("%ld", msg->type);
       }
   return result;
 }

@@ -88,7 +88,7 @@ static void send_msg_type_open_pty(int s, char *cmd)
     msg.len = 0;
     }
   if (mdl_queue_write_msg(s, &msg))
-    KERR("%d", msg.len);
+    KERR("%ld", msg.len);
 }
 /*--------------------------------------------------------------------------*/
 
@@ -100,7 +100,7 @@ static void send_msg_type_win_size(int s)
   msg.len = sizeof(struct winsize);
   ioctl(0, TIOCGWINSZ, msg.buf);
   if (mdl_queue_write_msg(s, &msg))
-    KERR("%d", msg.len);
+    KERR("%ld", msg.len);
 }
 /*--------------------------------------------------------------------------*/
 
@@ -233,7 +233,7 @@ static int rx_msg_cb(void *ptr, int sock_fd, t_msg *msg)
     {
     case msg_type_data_cli:
       if (mdl_queue_write_raw(1, msg->buf, msg->len))
-        KERR("%d", msg->len);
+        KERR("%ld", msg->len);
       break;
     case msg_type_end_cli:
       mdl_write(1);
@@ -255,7 +255,7 @@ static int rx_msg_cb(void *ptr, int sock_fd, t_msg *msg)
       x11_disconnect(disp_idx, conn_idx);
       break;
     default:
-      KOUT("%d", msg->type & 0xFFFF);
+      KOUT("%ld", msg->type & 0xFFFF);
     }
   return 0;
 }
@@ -274,7 +274,7 @@ static void action_input_rx(int sock_fd)
     msg.type = msg_type_data_pty;
     msg.len = len;
     if (mdl_queue_write_msg(sock_fd, &msg))
-      KERR("%d", msg.len);
+      KERR("%ld", msg.len);
     }
 }
 /*--------------------------------------------------------------------------*/
@@ -391,7 +391,7 @@ static void main_usock(char *unix_sock_path,
   if (sock_fd < 0)
     KOUT(" %s: %s\n", unix_sock_path, strerror(errno));
   if (cmd && (strlen(cmd) >= MAX_MSG_LEN))
-    KOUT("%d %s", strlen(cmd), cmd);
+    KOUT("%zd %s", strlen(cmd), cmd);
   loop_cli(sock_fd, cmd, src, dst);
 }
 /*--------------------------------------------------------------------------*/
@@ -405,7 +405,7 @@ static void main_vsock(char *cid, char *port,
   vsock_port = mdl_parse_val(port);
   sock_fd = connect_vsock(vsock_cid, vsock_port);
   if (cmd && (strlen(cmd) >= MAX_MSG_LEN))
-    KOUT("%d %s", strlen(cmd), cmd);
+    KOUT("%zd %s", strlen(cmd), cmd);
   loop_cli(sock_fd, cmd, src, dst);
 }
 /*--------------------------------------------------------------------------*/
@@ -420,7 +420,7 @@ static void main_isock(char *ip, char *port,
   if (sock_fd < 0)
     KOUT(" %s %s %s\n", ip, port, strerror(errno));
   if (cmd && (strlen(cmd) >= MAX_MSG_LEN))
-    KOUT("%d %s", strlen(cmd), cmd);
+    KOUT("%zd %s", strlen(cmd), cmd);
   loop_cli(sock_fd, cmd, src, dst);
 }
 /*--------------------------------------------------------------------------*/

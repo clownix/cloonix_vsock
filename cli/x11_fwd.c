@@ -48,7 +48,7 @@ static void send_msg_type_x11_init(int s)
   msg.type = msg_type_x11_init;
   msg.len = 0;
   if (mdl_queue_write_msg(s, &msg))
-    KERR("%d", msg.len);
+    KERR("%ld", msg.len);
 }
 /*--------------------------------------------------------------------------*/
 
@@ -62,7 +62,7 @@ static void send_msg_type_x11_connect_ack(int s, int disp_idx,
               (msg_type_x11_connect_ack & 0xFFFF);
   msg.len = sprintf(msg.buf, "%s", txt) + 1;
   if (mdl_queue_write_msg(s, &msg))
-    KERR("%d", msg.len);
+    KERR("%ld", msg.len);
 }
 /*--------------------------------------------------------------------------*/
 
@@ -105,7 +105,7 @@ static int x11_action_fd(int disp_idx, int conn_idx, int x11_fd, int sock_fd)
                 (msg_type_x11_data & 0xFFFF);
     msg.len = len;
     if (mdl_queue_write_msg(sock_fd, &msg))
-      KERR("%d", msg.len);
+      KERR("%ld", msg.len);
     else
       result = 0;
     }
