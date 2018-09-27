@@ -1,6 +1,9 @@
 PREFIX = /usr
 SUBDIRS = libmdl srv cli
 
+CFLAGS = -Wall
+export CFLAGS
+
 define SYSTEMD_UNIT_FILE
 [Unit]
 Description=virtio-vsock host/guest use for distant shell
