@@ -118,20 +118,20 @@ static int x11_action_fd(int disp_idx, int conn_idx, int x11_fd, int sock_fd)
 static int get_xauth_magic(char *display, char *err)
 {
   int result = -1;
-  char cmd[MAX_PATH_LEN];
-  char buf[MAX_PATH_LEN];
+  char cmd[MAX_PATH_LEN-MAX_STXT_LEN];
+  char buf[MAX_PATH_LEN-MAX_STXT_LEN];
   char *ptr, *end;
   FILE *fp;
   memset(err, 0, MAX_PATH_LEN);
-  memset(cmd, 0, MAX_PATH_LEN);
-  memset(buf, 0, MAX_PATH_LEN);
-  snprintf(cmd, MAX_PATH_LEN-1, "xauth list %s", display);
+  memset(cmd, 0, MAX_PATH_LEN-MAX_STXT_LEN);
+  memset(buf, 0, MAX_PATH_LEN-MAX_STXT_LEN);
+  snprintf(cmd, MAX_PATH_LEN-MAX_STXT_LEN-1, "xauth list %s", display);
   fp = popen(cmd, "r");
   if (fp == NULL)
     snprintf(err, MAX_PATH_LEN-1, "%s, popen", cmd);
   else
     {
-    if (!fgets(buf, MAX_PATH_LEN-1, fp))
+    if (!fgets(buf, MAX_PATH_LEN-MAX_STXT_LEN-1, fp))
       snprintf(err, MAX_PATH_LEN-1, "%s, fgets", cmd);
     else
       {
@@ -241,14 +241,14 @@ void x11_disconnect(int disp_idx, int conn_idx)
 /****************************************************************************/
 static void create_conn_and_ack(int fd, int sock_fd,int disp_idx,int conn_idx)
 {
-  char msg[MAX_PATH_LEN];
+  char msg[MAX_PATH_LEN+MAX_STXT_LEN];
   g_conn[conn_idx] = (t_conn_cli_x11 *) malloc(sizeof(t_conn_cli_x11));
   memset(g_conn[conn_idx], 0, sizeof(t_conn_cli_x11));
   g_conn[conn_idx]->disp_idx = disp_idx;
   g_conn[conn_idx]->x11_fd   = fd;
   g_conn[conn_idx]->sock_fd  = sock_fd;
-  memset(msg, 0, MAX_PATH_LEN);
-  snprintf(msg, MAX_PATH_LEN-1, "OK %s", g_x11_magic);
+  memset(msg, 0, MAX_PATH_LEN+MAX_STXT_LEN);
+  snprintf(msg, MAX_PATH_LEN+MAX_STXT_LEN-1, "OK %s", g_x11_magic);
   send_msg_type_x11_connect_ack(sock_fd, disp_idx, conn_idx, msg);
 }
 /*--------------------------------------------------------------------------*/

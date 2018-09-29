@@ -18,6 +18,7 @@
 
 #define MAX_MSG_LEN 4096
 #define MAX_PATH_LEN 300
+#define MAX_STXT_LEN 30
 
 #include <string.h>
 #include <syslog.h>

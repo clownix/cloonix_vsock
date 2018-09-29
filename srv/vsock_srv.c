@@ -62,32 +62,32 @@ typedef struct t_cli
 static t_cli *g_cli_head;
 static int g_nb_cli;
 static int g_sig_write_fd;
-static char g_home[MAX_PATH_LEN];
+static char g_home[MAX_PATH_LEN-MAX_STXT_LEN];
 static char g_path[MAX_PATH_LEN];
 static char g_term[MAX_PATH_LEN];
 static char g_shell[MAX_PATH_LEN];
 static char g_xauthority[MAX_PATH_LEN];
-static char g_xauthority_file[MAX_PATH_LEN];
+static char g_xauthority_file[MAX_PATH_LEN-MAX_STXT_LEN];
 
 /****************************************************************************/
 static void init_all_env(void)
 {
   char *home = getenv("HOME");
-  memset(g_home, 0, MAX_PATH_LEN);
+  memset(g_home, 0, MAX_PATH_LEN-MAX_STXT_LEN);
   memset(g_path, 0, MAX_PATH_LEN);
   memset(g_term, 0, MAX_PATH_LEN);
   memset(g_shell, 0, MAX_PATH_LEN);
   memset(g_xauthority, 0, MAX_PATH_LEN);
-  memset(g_xauthority_file, 0, MAX_PATH_LEN);
+  memset(g_xauthority_file, 0, MAX_PATH_LEN-MAX_STXT_LEN);
   if (!home)
     {
-    snprintf(g_home, MAX_PATH_LEN-1, "HOME=%s", "/root");
-    snprintf(g_xauthority_file, MAX_PATH_LEN-1, "/root/.CloonixXauthority"); 
+    snprintf(g_home, MAX_PATH_LEN-MAX_STXT_LEN-1, "HOME=%s", "/root");
+    sprintf(g_xauthority_file, "/root/.CloonixXauthority"); 
     snprintf(g_xauthority, MAX_PATH_LEN-1, "XAUTHORITY=%s", g_xauthority_file); 
     }
   else
     {
-    snprintf(g_home, MAX_PATH_LEN-1, "HOME=%s", home);
+    snprintf(g_home, MAX_PATH_LEN-MAX_STXT_LEN-1, "HOME=%s", home);
     snprintf(g_xauthority_file, MAX_PATH_LEN-1, "%s/.CloonixXauthority", home); 
     snprintf(g_xauthority, MAX_PATH_LEN-1, "XAUTHORITY=%s", g_xauthority_file); 
     }
