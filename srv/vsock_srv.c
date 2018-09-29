@@ -331,7 +331,7 @@ static void send_msg_type_end(int s, char status)
   msg.len = 1;
   msg.buf[0] = status;
   if (mdl_queue_write_msg(s, &msg))
-    KERR("%d", msg.len);
+    KERR("%ld", msg.len);
 }
 /*--------------------------------------------------------------------------*/
 
@@ -352,7 +352,7 @@ static int rx_msg_cb(void *ptr, int sock_fd, t_msg *msg)
       if (cli->pty_master_fd == -1)
         KOUT(" ");
       else if (mdl_queue_write_raw(cli->pty_master_fd, msg->buf, msg->len))
-        KERR("%d", msg->len);
+        KERR("%ld", msg->len);
     break;
 
     case msg_type_open_bash :
@@ -418,7 +418,7 @@ static int rx_msg_cb(void *ptr, int sock_fd, t_msg *msg)
       break;
 
     default :
-      KOUT("%d", msg->type);
+      KOUT("%ld", msg->type);
       }
   return result;
 }
@@ -530,7 +530,7 @@ static void prepare_fd_set(int listen_sock_fd, int sig_read_fd,
 static void server_loop(int listen_sock_fd, int sig_read_fd)
 {
   int max_fd;
-  t_cli *next, *cur;
+  t_cli *next = NULL, *cur;
   fd_set readfds, writefds;
   cur = g_cli_head;
   while(cur)
@@ -588,7 +588,8 @@ static void server_loop(int listen_sock_fd, int sig_read_fd)
 static void vsock_srv(int listen_sock_fd)
 {
   int pipe_fd[2];
-  daemon(0,0);
+  if (daemon(0, 0) == -1)
+    KOUT("daemon(): %s", strerror(errno));
   signal(SIGPIPE, SIG_IGN);
   if (signal(SIGHUP, SIG_IGN))
     KERR("%d", errno);
@@ -605,20 +606,6 @@ static void vsock_srv(int listen_sock_fd)
     {
     server_loop(listen_sock_fd, pipe_fd[0]);
     }
-}
-/*--------------------------------------------------------------------------*/
-
-/****************************************************************************/
-static int parse_port(const char *port_str)
-{
-  int result = -1;
-  char *end = NULL;
-  long port = strtol(port_str, &end, 10);
-  if (port_str != end && *end == '\0')
-    result = (int) port;
-  else
-    KOUT("%s", port_str);
-  return result;
 }
 /*--------------------------------------------------------------------------*/
 

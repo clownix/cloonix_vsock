@@ -154,7 +154,7 @@ static void send_msg_type_x11_connect(int s, int disp_idx, int conn_idx)
               (msg_type_x11_connect & 0xFFFF);
   msg.len = 0;
   if (mdl_queue_write_msg(s, &msg))
-    KERR("%d", msg.len);
+    KERR("%ld", msg.len);
 }
 /*--------------------------------------------------------------------------*/
 
@@ -165,7 +165,7 @@ static void send_msg_type_x11_init(int s, char *txt)
   msg.type = msg_type_x11_init;
   msg.len = sprintf(msg.buf, "%s", txt) + 1;
   if (mdl_queue_write_msg(s, &msg))
-    KERR("%d", msg.len);
+    KERR("%ld", msg.len);
 }
 /*--------------------------------------------------------------------------*/
 
@@ -178,7 +178,7 @@ static void disconnect_conn_idx(t_display_x11 *disp, int conn_idx)
               (msg_type_x11_disconnect & 0xFFFF);
   msg.len = 0;
   if (mdl_queue_write_msg(disp->sock_fd, &msg))
-    KERR("%d", msg.len);
+    KERR("%ld", msg.len);
   close(disp->conn[conn_idx]->x11_fd);
   free_pool_idx(disp, conn_idx);
 }
@@ -201,7 +201,7 @@ static int prepare_next_conn_idx(t_display_x11 *disp)
 /****************************************************************************/
 static void x11_listen_action(t_display_x11 *disp)
 {
-  int fd, conn_idx;
+  int fd;
   fd = accept(disp->x11_listen_fd, NULL, NULL);
   if (fd < 0)
     KERR("%s", strerror(errno));
@@ -239,7 +239,7 @@ static int x11_action_fd(int disp_idx, int conn_idx, int x11_fd, int sock_fd)
                 (msg_type_x11_data & 0xFFFF);
     msg.len = len;
     if (mdl_queue_write_msg(sock_fd, &msg))
-      KERR("%d", msg.len);
+      KERR("%ld", msg.len);
     else
       result = 0;
     }

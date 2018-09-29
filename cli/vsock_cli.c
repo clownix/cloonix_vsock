@@ -42,7 +42,6 @@ static struct termios g_orig_term;
 static struct termios g_cur_term;
 static int g_win_chg_write_fd;
 static int g_x11_ok;
-static char g_sock_path[MAX_PATH_LEN];
 static int g_is_snd;
 static int g_is_rcv;
 
@@ -69,7 +68,8 @@ static void win_size_chg(int sig)
 {
   char buf[1];
   buf[0] = 'w';
-  write(g_win_chg_write_fd, buf, 1);
+  if (write(g_win_chg_write_fd, buf, 1) == -1)
+    KERR("Unable to write to g_win_chg_write_fd: %s", strerror(errno));
 }
 /*--------------------------------------------------------------------------*/
 
@@ -88,7 +88,7 @@ static void send_msg_type_open_pty(int s, char *cmd)
     msg.len = 0;
     }
   if (mdl_queue_write_msg(s, &msg))
-    KERR("%d", msg.len);
+    KERR("%ld", msg.len);
 }
 /*--------------------------------------------------------------------------*/
 
@@ -100,7 +100,7 @@ static void send_msg_type_win_size(int s)
   msg.len = sizeof(struct winsize);
   ioctl(0, TIOCGWINSZ, msg.buf);
   if (mdl_queue_write_msg(s, &msg))
-    KERR("%d", msg.len);
+    KERR("%ld", msg.len);
 }
 /*--------------------------------------------------------------------------*/
 
@@ -205,9 +205,9 @@ static int connect_vsock(int cid, int port)
 /****************************************************************************/
 static void action_win_chg(int sock_fd, int win_chg_read_fd)
 {
-  int len;
   char buf[16];
-  len = read(win_chg_read_fd, buf, sizeof(buf));
+  if (read(win_chg_read_fd, buf, sizeof(buf)) == -1)
+    KERR("Could not read from win_chg_read_fd: %s", strerror(errno));
   send_msg_type_win_size(sock_fd);
 }
 /*--------------------------------------------------------------------------*/
@@ -224,7 +224,7 @@ static void rx_err_cb (void *ptr, char *err)
 static int rx_msg_cb(void *ptr, int sock_fd, t_msg *msg)
 {
   (void) ptr;
-  int len, type, disp_idx, conn_idx;
+  int type, disp_idx, conn_idx;
   type = msg->type & 0xFFFF;
   disp_idx = (msg->type >> 24) & 0x00FF;
   conn_idx = (msg->type >> 16) & 0x00FF;
@@ -233,7 +233,7 @@ static int rx_msg_cb(void *ptr, int sock_fd, t_msg *msg)
     {
     case msg_type_data_cli:
       if (mdl_queue_write_raw(1, msg->buf, msg->len))
-        KERR("%d", msg->len);
+        KERR("%ld", msg->len);
       break;
     case msg_type_end_cli:
       mdl_write(1);
@@ -255,7 +255,7 @@ static int rx_msg_cb(void *ptr, int sock_fd, t_msg *msg)
       x11_disconnect(disp_idx, conn_idx);
       break;
     default:
-      KOUT("%d", msg->type & 0xFFFF);
+      KOUT("%ld", msg->type & 0xFFFF);
     }
   return 0;
 }
@@ -274,7 +274,7 @@ static void action_input_rx(int sock_fd)
     msg.type = msg_type_data_pty;
     msg.len = len;
     if (mdl_queue_write_msg(sock_fd, &msg))
-      KERR("%d", msg.len);
+      KERR("%ld", msg.len);
     }
 }
 /*--------------------------------------------------------------------------*/
@@ -391,7 +391,7 @@ static void main_usock(char *unix_sock_path,
   if (sock_fd < 0)
     KOUT(" %s: %s\n", unix_sock_path, strerror(errno));
   if (cmd && (strlen(cmd) >= MAX_MSG_LEN))
-    KOUT("%d %s", strlen(cmd), cmd);
+    KOUT("%zd %s", strlen(cmd), cmd);
   loop_cli(sock_fd, cmd, src, dst);
 }
 /*--------------------------------------------------------------------------*/
@@ -405,7 +405,7 @@ static void main_vsock(char *cid, char *port,
   vsock_port = mdl_parse_val(port);
   sock_fd = connect_vsock(vsock_cid, vsock_port);
   if (cmd && (strlen(cmd) >= MAX_MSG_LEN))
-    KOUT("%d %s", strlen(cmd), cmd);
+    KOUT("%zd %s", strlen(cmd), cmd);
   loop_cli(sock_fd, cmd, src, dst);
 }
 /*--------------------------------------------------------------------------*/
@@ -420,7 +420,7 @@ static void main_isock(char *ip, char *port,
   if (sock_fd < 0)
     KOUT(" %s %s %s\n", ip, port, strerror(errno));
   if (cmd && (strlen(cmd) >= MAX_MSG_LEN))
-    KOUT("%d %s", strlen(cmd), cmd);
+    KOUT("%zd %s", strlen(cmd), cmd);
   loop_cli(sock_fd, cmd, src, dst);
 }
 /*--------------------------------------------------------------------------*/
@@ -458,7 +458,6 @@ static int get_params(int ac, char **av, char **cmd, char **src, char **dst)
 /****************************************************************************/
 int main(int argc, char **argv)
 {
-  char unix_sock_path[MAX_PATH_LEN];
   char *cmd, *src, *dst;
   g_is_snd = 0;
   g_is_rcv = 0;

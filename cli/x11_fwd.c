@@ -48,7 +48,7 @@ static void send_msg_type_x11_init(int s)
   msg.type = msg_type_x11_init;
   msg.len = 0;
   if (mdl_queue_write_msg(s, &msg))
-    KERR("%d", msg.len);
+    KERR("%ld", msg.len);
 }
 /*--------------------------------------------------------------------------*/
 
@@ -62,7 +62,7 @@ static void send_msg_type_x11_connect_ack(int s, int disp_idx,
               (msg_type_x11_connect_ack & 0xFFFF);
   msg.len = sprintf(msg.buf, "%s", txt) + 1;
   if (mdl_queue_write_msg(s, &msg))
-    KERR("%d", msg.len);
+    KERR("%ld", msg.len);
 }
 /*--------------------------------------------------------------------------*/
 
@@ -105,7 +105,7 @@ static int x11_action_fd(int disp_idx, int conn_idx, int x11_fd, int sock_fd)
                 (msg_type_x11_data & 0xFFFF);
     msg.len = len;
     if (mdl_queue_write_msg(sock_fd, &msg))
-      KERR("%d", msg.len);
+      KERR("%ld", msg.len);
     else
       result = 0;
     }
@@ -146,7 +146,7 @@ static int get_xauth_magic(char *display, char *err)
           {
           ptr += strlen("MIT-MAGIC-COOKIE-1");
           ptr += strspn(ptr, " \t");
-          if (!strlen(ptr) > 1)
+          if (strlen(ptr) < 1)
             snprintf(err, MAX_PATH_LEN-1, "%s, MIT-MAGIC strlen1", buf);
           else
             {
@@ -156,7 +156,7 @@ static int get_xauth_magic(char *display, char *err)
             end = strchr(ptr, '\n');
             if (end) 
               *end = 0;
-            if (!strlen(ptr) > 1)
+            if (strlen(ptr) < 1)
               snprintf(err, MAX_PATH_LEN-1, "%s, MIT-MAGIC strlen2", buf);
             else
               {
@@ -228,7 +228,6 @@ void x11_fd_isset(fd_set *readfds)
 /****************************************************************************/
 void x11_disconnect(int disp_idx, int conn_idx)
 {
-  int fd = -1;
   if ((disp_idx <= 0) || (disp_idx >= MAX_DISPLAY_X11))
     KOUT("%d %d", disp_idx, conn_idx);
   if ((conn_idx <= 0) || (conn_idx >= MAX_IDX_X11))
@@ -301,7 +300,7 @@ void x11_connect(int disp_idx, int conn_idx, int sock_fd)
 /****************************************************************************/
 void x11_init(int sock_fd)
 {
-  int fd, val, result = -1;
+  int fd, val;
   char err[MAX_PATH_LEN];
   char *display = getenv("DISPLAY");
   g_x11_port = 0;

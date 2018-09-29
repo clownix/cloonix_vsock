@@ -89,7 +89,7 @@ static int send_msg_type_scp_open_snd(int s, char *src, char *remote_dir)
     msg.type = msg_type_scp_open_snd;
     msg.len = sprintf(msg.buf, "%s %s", src, complete_dst) + 1;
     if (mdl_queue_write_msg(s, &msg))
-      KERR("%d", msg.len);
+      KERR("%ld", msg.len);
     }
   return result;
 }
@@ -106,7 +106,7 @@ static int send_msg_type_scp_open_rcv(int s, char *src, char *local_dir)
     msg.type = msg_type_scp_open_rcv;
     msg.len = sprintf(msg.buf, "%s %s", src, complete_dst) + 1;
     if (mdl_queue_write_msg(s, &msg))
-      KERR("%d", msg.len);
+      KERR("%ld", msg.len);
     result = 0;
     }
   return result;
@@ -120,7 +120,7 @@ static void send_scp_data_end(int sock_fd)
   msg.type = msg_type_scp_data_end;
   msg.len = 0;
   if (mdl_queue_write_msg(sock_fd, &msg))
-    KERR("%d", msg.len);
+    KERR("%ld", msg.len);
 }
 /*--------------------------------------------------------------------------*/
 
@@ -131,7 +131,7 @@ static void send_scp_data_begin(int sock_fd)
   msg.type = msg_type_scp_data_begin;
   msg.len = 0;
   if (mdl_queue_write_msg(sock_fd, &msg))
-    KERR("%d", msg.len);
+    KERR("%ld", msg.len);
 }
 /*--------------------------------------------------------------------------*/
 
@@ -148,7 +148,7 @@ static int send_scp_data(int sock_fd)
   msg.type = msg_type_scp_data;
   msg.len = len;
   if (mdl_queue_write_msg(sock_fd, &msg))
-    KERR("%d", msg.len);
+    KERR("%ld", msg.len);
   return result;
 }
 /*--------------------------------------------------------------------------*/
@@ -164,7 +164,7 @@ void recv_scp_data_end(int sock_fd)
   msg.type = msg_type_scp_data_end_ack;
   msg.len = 0;
   if (mdl_queue_write_msg(sock_fd, &msg))
-    KERR("%d", msg.len);
+    KERR("%ld", msg.len);
 }
 /*--------------------------------------------------------------------------*/
 
@@ -176,7 +176,7 @@ void recv_scp_data(t_msg *msg)
     KOUT(" ");
   len = write(g_scp_fd, msg->buf, msg->len);
   if ((len < 0) || (len != msg->len))
-    KOUT("%d %d %d", len, msg->len, errno);
+    KOUT("%d %ld %d", len, msg->len, errno);
 }
 /*--------------------------------------------------------------------------*/
 
@@ -239,7 +239,7 @@ static int rx_scp_msg_cb(void *ptr, int sock_fd, t_msg *msg)
       exit(0);
       break;
     default:
-      KOUT("%d", msg->type);
+      KOUT("%ld", msg->type);
     }
   return 0;
 }
