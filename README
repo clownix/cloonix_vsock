@@ -9,15 +9,23 @@ Also provides regular file copy to or from distant server.
 Also forwards the x11 graphical applications.
 
 
-To use, first create the server and client binaries:
+To install:
 
-./doitall
+make
+make install  (to be done as root)
+
+The service vsock_srv.service is created disabled in the machine:
+systemctl list-unit-files |grep vsock
+vsock_srv.service                                                disabled
+if you want the service to start with next boot of your machine, do:
+systemctl enable vsock_srv.service
+
 
 Then the server command line is:
-./vsock_srv <vsock_port>
+vsock_srv <vsock_port>
 
 And the client command line is:
-./vsock_cli <vsock_cid> <vsock_port>
+vsock_cli <vsock_cid> <vsock_port>
 
 The vsock_cid is 2 (harcoded) for the host and you can use from 3 upwards
 for the guests.
@@ -33,7 +41,7 @@ line in its start command (case where guest cid is chosen to be 4):
 
 sudo modprobe vhost_vsock
 sudo chmod 0666 /dev/vhost-vsock
-sudo ./vsock_srv 777
+sudo vsock_srv 777
 qemu... -device vhost-vsock-pci,...guest-cid=4 ...
 
 
@@ -50,7 +58,7 @@ Errors I have had during tries:
 
 Once inside the guest virtual machine:
 
-./vsock_cli 2 777
+vsock_cli 2 777
 
 
 And you get a pseudo-console as root on the host machine.
@@ -68,33 +76,33 @@ on the real host/guest env.
 
 Here are the possible commands for the server for unix or ip:
 
-./vsock_srv -i <inet_port>
-./vsock_srv -u <unix_sock_path>
+vsock_srv -i <inet_port>
+vsock_srv -u <unix_sock_path>
 
 #--------------------------------------------------------------------
 Here are the possible commands for the client for unix or ip:
 
-./vsock_cli -i <ip> <port>
-./vsock_cli -i <ip> <port> -cmd "<cmd + params>"
-./vsock_cli -i <ip> <port> -snd <loc_src> <rem_dst_dir>
-./vsock_cli -i <ip> <port> -rcv <rem_src> <loc_dst_dir>
+vsock_cli -i <ip> <port>
+vsock_cli -i <ip> <port> -cmd "<cmd + params>"
+vsock_cli -i <ip> <port> -snd <loc_src> <rem_dst_dir>
+vsock_cli -i <ip> <port> -rcv <rem_src> <loc_dst_dir>
 
-./vsock_cli -u <unix_sock>
-./vsock_cli -u <unix_sock> -cmd "<cmd + params>"
-./vsock_cli -u <unix_sock> -snd <loc_src> <rem_dst_dir>
-./vsock_cli -u <unix_sock> -rcv <rem_src> <loc_dst_dir>
+vsock_cli -u <unix_sock>
+vsock_cli -u <unix_sock> -cmd "<cmd + params>"
+vsock_cli -u <unix_sock> -snd <loc_src> <rem_dst_dir>
+vsock_cli -u <unix_sock> -rcv <rem_src> <loc_dst_dir>
 
 #--------------------------------------------------------------------
 Basic Examples:
 
-./vsock_srv 7777
-./vsock_cli 2 7777
+vsock_srv 7777
+vsock_cli 2 7777
 
-./vsock_srv -u /tmp/whatever
-./vsock_cli -u /tmp/whatever
+vsock_srv -u /tmp/whatever
+vsock_cli -u /tmp/whatever
 
-./vsock_srv -i 127.0.0.1 7777
-./vsock_cli -i 127.0.0.1 7777
+vsock_srv -i 127.0.0.1 7777
+vsock_cli -i 127.0.0.1 7777
 
 #--------------------------------------------------------------------
 
