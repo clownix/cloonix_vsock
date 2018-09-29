@@ -1,5 +1,8 @@
 OBJECTS := $(patsubst %.c,obj/%.o,$(SOURCES))
 
+RANLIB?=ranlib
+AR?=ar
+
 all: $(TARGET)
 
 vsock_cli vsock_srv: $(OBJECTS)
